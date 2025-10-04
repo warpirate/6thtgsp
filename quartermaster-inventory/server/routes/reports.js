@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const reportController = require('../controllers/reportController');
-const { requireAdmin, logActivity } = require('../middleware/auth');
+const { requireAdmin, requireSuperAdmin, logActivity } = require('../middleware/auth');
 
 // Report routes
 router.get('/receipt-register', reportController.getReceiptRegister);

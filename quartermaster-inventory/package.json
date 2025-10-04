@@ -10,26 +10,32 @@
     "build": "cd client && npm run build",
     "start": "node server/index.js",
     "db:migrate": "node server/database/migrate.js",
-    "db:seed": "node server/database/seed.js"
+    "db:seed": "node server/database/seed.js",
+    "db:test": "node server/database/test-connection.js"
   },
-  "keywords": ["inventory", "military", "quartermaster"],
+  "keywords": [
+    "inventory",
+    "military",
+    "quartermaster"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
-    "pg": "^8.11.3",
+    "@supabase/supabase-js": "^2.58.0",
     "bcrypt": "^5.1.1",
-    "jsonwebtoken": "^9.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
-    "multer": "^1.4.5-lts.1",
+    "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
     "express-validator": "^7.0.1",
     "helmet": "^7.1.0",
-    "morgan": "^1.10.0"
+    "jsonwebtoken": "^9.0.2",
+    "morgan": "^1.10.0",
+    "multer": "^1.4.5-lts.1",
+    "pg": "^8.11.3"
   },
   "devDependencies": {
-    "nodemon": "^3.0.2",
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "nodemon": "^3.0.2"
   }
 }

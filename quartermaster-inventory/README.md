@@ -17,13 +17,13 @@ A secure web application for tracking government property received from head off
 
 - **Frontend**: React 18 + TypeScript + Tailwind CSS
 - **Backend**: Node.js + Express
-- **Database**: PostgreSQL
+- **Database**: PostgreSQL / Supabase
 - **Authentication**: JWT + bcrypt
 
 ## Prerequisites
 
 - Node.js (v18 or higher)
-- PostgreSQL (v14 or higher)
+- PostgreSQL (v14 or higher) **OR** Supabase account
 - npm or yarn
 
 ## Installation
@@ -38,23 +38,51 @@ A secure web application for tracking government property received from head off
 3. Set up environment variables:
    ```bash
    cp .env.example .env
-   # Edit .env with your database credentials
+   # Edit .env with your database credentials (see Database Setup below)
    ```
 
-4. Create PostgreSQL database:
-   ```sql
-   CREATE DATABASE quartermaster_db;
-   ```
+4. **Database Setup** - Choose ONE option:
 
-5. Run database migrations:
-   ```bash
-   npm run db:migrate
-   ```
+   ### Option A: Using Supabase (Recommended for Production)
+   
+   1. Create a new project at [supabase.com](https://supabase.com)
+   2. Go to **Settings → Database**
+   3. Copy the **Connection string** (URI format)
+   4. In your `.env` file, set:
+      ```
+      DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres
+      ```
+   5. Run migrations:
+      ```bash
+      npm run db:migrate
+      ```
+   6. Seed initial data:
+      ```bash
+      npm run db:seed
+      ```
 
-6. Seed initial data (creates default admin user):
-   ```bash
-   npm run db:seed
-   ```
+   ### Option B: Using Local PostgreSQL
+   
+   1. Create a PostgreSQL database:
+      ```sql
+      CREATE DATABASE quartermaster_db;
+      ```
+   2. In your `.env` file, set:
+      ```
+      DB_HOST=localhost
+      DB_PORT=5432
+      DB_NAME=quartermaster_db
+      DB_USER=postgres
+      DB_PASSWORD=your_password
+      ```
+   3. Run migrations:
+      ```bash
+      npm run db:migrate
+      ```
+   4. Seed initial data:
+      ```bash
+      npm run db:seed
+      ```
 
 ## Running the Application
 
@@ -182,6 +210,28 @@ quartermaster-inventory/
 - Email must be valid format
 - Password minimum 8 characters, alphanumeric
 - File uploads: PDF, JPG, PNG only; max 5MB
+
+## Database Compatibility Notes
+
+This application is fully compatible with both PostgreSQL and Supabase. The following PostgreSQL features are used:
+
+- **UUID Generation**: Uses `gen_random_uuid()` (built-in from PostgreSQL 13+)
+- **ENUM Types**: Custom enums for user roles, item categories, receipt statuses, and workflow actions
+- **JSONB**: For storing audit log data
+- **Triggers**: Automatic updated_at timestamps and audit logging
+- **Generated Columns**: Automatic variance and total_value calculations
+- **Full-Text Search**: Available for item nomenclature searches
+
+All these features are fully supported by Supabase as it runs on PostgreSQL 15.
+
+### Switching Between PostgreSQL and Supabase
+
+To switch databases, simply update your `.env` file:
+
+- **For Supabase**: Set `DATABASE_URL` to your Supabase connection string
+- **For Local PostgreSQL**: Comment out `DATABASE_URL` and set individual `DB_*` variables
+
+The application automatically detects which connection method to use.
 
 ## Support
 

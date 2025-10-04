@@ -13,16 +13,29 @@ const config = {
   },
 
   // Database configuration
-  database: {
-    host: process.env.DB_HOST || 'localhost',
-    port: process.env.DB_PORT || 5432,
-    database: process.env.DB_NAME || 'quartermaster_db',
-    user: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD,
-    max: 20, // max number of clients in pool
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-  },
+  database: process.env.DATABASE_URL 
+    ? {
+        // Supabase connection string (takes precedence if set)
+        connectionString: process.env.DATABASE_URL,
+        ssl: {
+          rejectUnauthorized: false // Required for Supabase
+        },
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
+        acquireTimeoutMillis: 10000,
+      }
+    : {
+        // Traditional PostgreSQL connection
+        host: process.env.DB_HOST || 'localhost',
+        port: process.env.DB_PORT || 5432,
+        database: process.env.DB_NAME || 'quartermaster_db',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 2000,
+      },
 
   // File upload configuration
   upload: {
@@ -50,7 +63,8 @@ const pool = new Pool(config.database);
 // Test database connection
 pool.on('connect', (client) => {
   if (config.nodeEnv === 'development') {
-    console.log('New client connected to PostgreSQL');
+    const dbType = process.env.DATABASE_URL ? 'Supabase' : 'PostgreSQL';
+    console.log(`✅ New client connected to ${dbType}`);
   }
 });
 
