@@ -3,13 +3,23 @@ const { Pool } = require('pg');
 
 require('dotenv').config();
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'quartermaster_db',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
-});
+// Configure pool for both Supabase and traditional PostgreSQL
+const poolConfig = process.env.DATABASE_URL 
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'quartermaster_db',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD,
+    };
+
+const pool = new Pool(poolConfig);
 
 async function seedDatabase() {
   const client = await pool.connect();
@@ -17,7 +27,8 @@ async function seedDatabase() {
   try {
     await client.query('BEGIN');
 
-    console.log('Seeding database with initial data...');
+    const dbType = process.env.DATABASE_URL ? 'Supabase' : 'PostgreSQL';
+    console.log(`Seeding ${dbType} database with initial data...`);
 
     // Check if admin user already exists
     const existingAdmin = await client.query(

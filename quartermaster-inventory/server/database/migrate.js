@@ -4,17 +4,28 @@ const path = require('path');
 
 require('dotenv').config();
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'quartermaster_db',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD,
-});
+// Configure pool for both Supabase and traditional PostgreSQL
+const poolConfig = process.env.DATABASE_URL 
+  ? {
+      connectionString: process.env.DATABASE_URL,
+      ssl: {
+        rejectUnauthorized: false
+      }
+    }
+  : {
+      host: process.env.DB_HOST || 'localhost',
+      port: process.env.DB_PORT || 5432,
+      database: process.env.DB_NAME || 'quartermaster_db',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD,
+    };
+
+const pool = new Pool(poolConfig);
 
 async function runMigrations() {
   try {
-    console.log('Running database migrations...');
+    const dbType = process.env.DATABASE_URL ? 'Supabase' : 'PostgreSQL';
+    console.log(`Running database migrations on ${dbType}...`);
 
     // Read and execute schema file
     const schemaPath = path.join(__dirname, 'schema.sql');

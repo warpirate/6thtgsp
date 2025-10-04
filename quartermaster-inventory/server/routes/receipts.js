@@ -12,6 +12,7 @@ const {
 const {
   requireUser,
   requireAdmin,
+  requireSuperAdmin,
   requireOwnershipOrAdmin,
   logActivity
 } = require('../middleware/auth');
