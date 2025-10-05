@@ -1,7 +1,8 @@
-import React, { Suspense } from 'react'
+import React, { Suspense, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { UserRole } from '@/types'
+import { authDebug } from '@/lib/auth/authDebug'
 
 // Layout Components
 import MainLayout from '@/components/layout/MainLayout'
@@ -26,6 +27,14 @@ import DocumentsPage from '@/pages/documents/DocumentsPage'
 import UsersPage from '@/pages/users/UsersPage'
 import ProfilePage from '@/pages/profile/ProfilePage'
 import SettingsPage from '@/pages/settings/SettingsPage'
+
+// Requisition Pages
+import CatalogPage from '@/pages/catalog/CatalogPage'
+import CreateRequisitionPage from '@/pages/requisitions/CreateRequisitionPage'
+import RequisitionsPage from '@/pages/requisitions/RequisitionsPage'
+import RequisitionDetailPage from '@/pages/requisitions/RequisitionDetailPage'
+import IssuancePage from '@/pages/issuance/IssuancePage'
+import ReturnsPage from '@/pages/returns/ReturnsPage'
 
 // Error Pages
 import NotFoundPage from '@/pages/errors/NotFoundPage'
@@ -83,16 +92,29 @@ const PublicRoute: React.FC<PublicRouteProps> = ({ children }) => {
 }
 
 const App: React.FC = () => {
-  const { initializing } = useAuth()
+  const { initializing, user } = useAuth()
+
+  // Debug authentication on mount (development only)
+  useEffect(() => {
+    if ((import.meta as any).env?.DEV) {
+      authDebug.checkAuthStatus()
+    }
+  }, [user])
 
   // Show loading spinner while initializing authentication
   if (initializing) {
+    console.log('App: Still initializing auth...')
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <LoadingSpinner size="lg" />
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#F8FAFC' }}>
+        <div className="text-center">
+          <LoadingSpinner size="lg" />
+          <p className="mt-4 text-sm text-gray-600">Loading...</p>
+        </div>
       </div>
     )
   }
+
+  console.log('App: Auth initialized, user:', user?.email || 'none')
 
   return (
     <ErrorBoundary>
@@ -169,6 +191,22 @@ const App: React.FC = () => {
 
                       {/* Documents */}
                       <Route path="/documents" element={<DocumentsPage />} />
+
+                      {/* Catalog & Requisitions */}
+                      <Route path="/catalog" element={<CatalogPage />} />
+                      <Route path="/requisitions" element={<RequisitionsPage />} />
+                      <Route path="/requisitions/create" element={<CreateRequisitionPage />} />
+                      <Route path="/requisitions/:id" element={<RequisitionDetailPage />} />
+
+                      {/* Issuance (Store Keeper) */}
+                      <Route path="/issuance" element={
+                        <ProtectedRoute requiredPermission="issue_items">
+                          <IssuancePage />
+                        </ProtectedRoute>
+                      } />
+
+                      {/* Returns */}
+                      <Route path="/returns" element={<ReturnsPage />} />
 
                       {/* User Management */}
                       <Route path="/users" element={

@@ -1,17 +1,51 @@
 import React, { useState } from 'react'
 import { User, Mail, Edit, Key, Activity } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
+import { toast } from 'react-hot-toast'
 
 const ProfilePage: React.FC = () => {
-  const { userProfile } = useAuth()
+  const { userProfile, updatePassword } = useAuth()
   const [isEditing, setIsEditing] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [changingPassword, setChangingPassword] = useState(false)
 
   const mockActivity = [
     { action: 'Created receipt REC-2024-001', date: '2024-10-04 14:30' },
     { action: 'Submitted receipt for verification', date: '2024-10-04 15:00' },
     { action: 'Logged in', date: '2024-10-04 09:00' },
   ]
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (newPassword !== confirmPassword) {
+      toast.error('New passwords do not match')
+      return
+    }
+
+    if (newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters')
+      return
+    }
+
+    setChangingPassword(true)
+    try {
+      await updatePassword(newPassword)
+      toast.success('Password updated successfully')
+      setShowChangePassword(false)
+      setCurrentPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (error: any) {
+      console.error('Password change error:', error)
+      toast.error(error.message || 'Failed to update password')
+    } finally {
+      setChangingPassword(false)
+    }
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -93,23 +127,47 @@ const ProfilePage: React.FC = () => {
         </div>
 
         {showChangePassword && (
-          <div className="space-y-4 mt-4">
+          <form onSubmit={handlePasswordChange} className="space-y-4 mt-4">
             <div>
               <label className="label">Current Password</label>
-              <input type="password" className="input" />
+              <input 
+                type="password" 
+                className="input"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
             </div>
             <div>
               <label className="label">New Password</label>
-              <input type="password" className="input" />
+              <input 
+                type="password" 
+                className="input"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={6}
+                required
+              />
             </div>
             <div>
               <label className="label">Confirm New Password</label>
-              <input type="password" className="input" />
+              <input 
+                type="password" 
+                className="input"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                minLength={6}
+                required
+              />
             </div>
-            <button className="btn btn-primary">
-              Update Password
+            <button 
+              type="submit" 
+              className="btn btn-primary"
+              disabled={changingPassword}
+            >
+              {changingPassword ? 'Updating...' : 'Update Password'}
             </button>
-          </div>
+          </form>
         )}
       </div>
 

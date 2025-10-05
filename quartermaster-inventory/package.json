@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "type-check": "tsc --noEmit",
     "seed-users": "node scripts/seed-users.mjs",
+    "test-auth": "node scripts/test-auth.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css,md}\"",
     "db:generate-types": "supabase gen types typescript --local > src/types/database.types.ts",
     "db:reset": "supabase db reset",

@@ -9,13 +9,16 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables')
 }
 
-// Create Supabase client
+// Create Supabase client with proper session storage
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    storageKey: 'quartermaster-auth-token',
+    debug: (import.meta as any).env?.DEV || false,
   },
   db: {
     schema: 'public',
@@ -27,10 +30,38 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
 })
 
+// Global error handler for auth errors
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('Token refreshed successfully')
+  } else if (event === 'SIGNED_OUT') {
+    console.log('User signed out')
+  } else if (event === 'USER_UPDATED') {
+    console.log('User updated')
+  }
+})
+
 // Storage bucket names
 export const STORAGE_BUCKETS = {
   RECEIPT_DOCUMENTS: 'receipt-documents',
 } as const
+
+// Helper to ensure authenticated requests
+export const ensureAuthenticated = async () => {
+  const { data: { session }, error } = await supabase.auth.getSession()
+  
+  if (error) {
+    console.error('Session error:', error)
+    throw new Error('Authentication error: ' + error.message)
+  }
+  
+  if (!session) {
+    console.error('No active session found')
+    throw new Error('No active session. Please log in again.')
+  }
+  
+  return session
+}
 
 // Helper functions for common operations
 export const supabaseHelpers = {

@@ -12,6 +12,10 @@ import {
   Folder,
   ChevronLeft,
   ChevronRight,
+  ShoppingBag,
+  Send,
+  RotateCcw,
+  ListChecks,
   type LucideIcon
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
@@ -45,9 +49,30 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
       icon: LayoutDashboard,
     },
     {
+      name: 'Item Catalog',
+      href: '/catalog',
+      icon: ShoppingBag,
+    },
+    {
+      name: 'My Requisitions',
+      href: '/requisitions',
+      icon: ListChecks,
+    },
+    {
       name: 'Stock Receipts',
       href: '/receipts',
       icon: Receipt,
+    },
+    {
+      name: 'Issue Items',
+      href: '/issuance',
+      icon: Send,
+      requiredPermission: 'issue_items',
+    },
+    {
+      name: 'Returns',
+      href: '/returns',
+      icon: RotateCcw,
     },
     {
       name: 'Approvals',

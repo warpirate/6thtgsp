@@ -67,12 +67,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Error loading user profile:', error)
+        await signOut()
         return
       }
 
       setUserProfile(profile)
       
-      // Set role information from the user's role field
       if (profile.role) {
         setRole(profile.role as UserRoleName)
         setRoleName(profile.role as UserRoleName)
@@ -85,55 +85,81 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Initialize auth state
   useEffect(() => {
     let mounted = true
+    let authSubscription: any = null
+    let timeoutId: NodeJS.Timeout
 
     const initAuth = async () => {
       try {
+        console.log('Initializing auth...')
+        
         // Get initial session
         const { data: { session: initialSession }, error } = await supabase.auth.getSession()
         
         if (error) {
           console.error('Error getting initial session:', error)
         } else if (initialSession && mounted) {
+          console.log('Found existing session for:', initialSession.user.email)
           setSession(initialSession)
           setUser(initialSession.user)
           await loadUserProfile(initialSession.user.id)
+        } else {
+          console.log('No existing session found')
         }
       } catch (error) {
         console.error('Error initializing auth:', error)
       } finally {
         if (mounted) {
+          console.log('Auth initialization complete')
           setInitializing(false)
         }
       }
     }
 
-    initAuth()
-
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (!mounted) return
+    const setupAuthListener = () => {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+          if (!mounted) return
 
-        console.log('Auth state changed:', event, session?.user?.email)
+          console.log('Auth state changed:', event, session?.user?.email)
 
-        setSession(session)
-        setUser(session?.user || null)
+          setSession(session)
+          setUser(session?.user || null)
 
-        if (session?.user) {
-          await loadUserProfile(session.user.id)
-        } else {
-          setUserProfile(null)
-          setRole(null)
-          setRoleName(null)
+          if (session?.user) {
+            await loadUserProfile(session.user.id)
+          } else {
+            setUserProfile(null)
+            setRole(null)
+            setRoleName(null)
+          }
+
+          // Ensure initializing is set to false after auth state change
+          if (mounted) {
+            setInitializing(false)
+          }
         }
+      )
+      authSubscription = subscription
+    }
 
+    // Failsafe: ensure initializing is set to false after max 5 seconds
+    timeoutId = setTimeout(() => {
+      if (mounted && initializing) {
+        console.warn('Auth initialization timeout - forcing completion')
         setInitializing(false)
       }
-    )
+    }, 5000)
+
+    initAuth()
+    setupAuthListener()
 
     return () => {
       mounted = false
-      subscription.unsubscribe()
+      clearTimeout(timeoutId)
+      if (authSubscription) {
+        authSubscription.unsubscribe()
+      }
     }
   }, [])
 
@@ -180,21 +206,28 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const signOut = async () => {
     setLoading(true)
     try {
-      const { error } = await supabase.auth.signOut()
-      if (error) throw error
-      
-      // Clear all state
+      // Clear all state first
       setUser(null)
       setUserProfile(null)
       setSession(null)
       setRole(null)
       setRoleName(null)
       
+      // Then sign out from Supabase
+      const { error } = await supabase.auth.signOut()
+      if (error) {
+        console.error('Supabase sign out error:', error)
+        // Don't throw - we've already cleared local state
+      }
+      
       toast.success('Signed out successfully')
+      
+      // Force redirect to login
+      window.location.href = '/auth/login'
     } catch (error: any) {
       console.error('Sign out error:', error)
-      toast.error('Failed to sign out')
-      throw error
+      // Still redirect even if there's an error
+      window.location.href = '/auth/login'
     } finally {
       setLoading(false)
     }
@@ -330,9 +363,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     // Permission mapping based on roles
     const rolePermissions: Record<string, string[]> = {
-      'semi_user': ['create_receipt', 'edit_own_draft'],
-      'user': ['create_receipt', 'edit_own_draft', 'verify_receipt'],
-      'admin': ['create_receipt', 'edit_own_draft', 'verify_receipt', 'approve_receipt', 'view_reports'],
+      'semi_user': ['create_requisition', 'view_catalog', 'view_own_requisitions'],
+      'user': ['create_requisition', 'view_catalog', 'view_own_requisitions', 'issue_items', 'accept_returns', 'manage_stock'],
+      'admin': ['create_requisition', 'view_catalog', 'view_own_requisitions', 'approve_requisition', 'view_reports', 'view_all_requisitions'],
+      'armory_officer': ['create_requisition', 'view_catalog', 'approve_weapon_requisition', 'issue_weapons', 'manage_weapons', 'view_weapon_register'],
       'super_admin': ['all']
     }
     
