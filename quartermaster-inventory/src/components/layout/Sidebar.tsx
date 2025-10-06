@@ -102,6 +102,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
       href: '/users',
       icon: Users,
       requiredRoles: [UserRole.SUPER_ADMIN],
+      requiredPermission: 'manage_users',
     },
     {
       name: 'Settings',
@@ -227,8 +228,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
           </div>
         )}
       </div>
-    </>
-  )
+    </> )
 }
 
 export default Sidebar

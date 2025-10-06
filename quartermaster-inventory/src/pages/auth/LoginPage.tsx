@@ -182,34 +182,6 @@ const LoginPage: React.FC = () => {
         </button>
       </form>
 
-      {/* Demo Accounts */}
-      <div className="border-t pt-6">
-        <p className="text-center text-sm text-muted-foreground mb-4">
-          Demo Accounts (for testing)
-        </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-          <div className="bg-muted/50 rounded p-3">
-            <p className="font-medium text-foreground">Semi User</p>
-            <p className="text-muted-foreground">semi@quartermaster.dev</p>
-            <p className="text-muted-foreground">demo123</p>
-          </div>
-          <div className="bg-muted/50 rounded p-3">
-            <p className="font-medium text-foreground">User</p>
-            <p className="text-muted-foreground">user@quartermaster.dev</p>
-            <p className="text-muted-foreground">demo123</p>
-          </div>
-          <div className="bg-muted/50 rounded p-3">
-            <p className="font-medium text-foreground">Admin</p>
-            <p className="text-muted-foreground">admin@quartermaster.dev</p>
-            <p className="text-muted-foreground">demo123</p>
-          </div>
-          <div className="bg-muted/50 rounded p-3">
-            <p className="font-medium text-foreground">Super Admin</p>
-            <p className="text-muted-foreground">super@quartermaster.dev</p>
-            <p className="text-muted-foreground">demo123</p>
-          </div>
-        </div>
-      </div>
 
       {/* Footer */}
       <div className="text-center pt-4 border-t">

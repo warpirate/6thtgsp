@@ -9,7 +9,7 @@ import { User } from './index'
 
 export type RequestType = 'self' | 'department' | 'bulk'
 export type Priority = 'normal' | 'urgent' | 'emergency'
-export type RequisitionStatus = 'draft' | 'pending' | 'approved' | 'ready' | 'issued' | 'completed' | 'rejected' | 'cancelled'
+export type RequisitionStatus = 'draft' | 'pending' | 'approved' | 'ready_for_pickup' | 'issued' | 'completed' | 'rejected' | 'cancelled'
 export type ItemCondition = 'new' | 'good' | 'fair' | 'damaged'
 export type ReturnStatus = 'pending' | 'accepted' | 'rejected'
 export type ReturnCondition = 'good' | 'fair' | 'damaged' | 'lost'
@@ -473,7 +473,7 @@ export interface Cart {
 // =============================================
 
 export interface RequisitionNotification {
-  type: 'requisition_approved' | 'requisition_rejected' | 'requisition_ready' | 'requisition_issued' | 'return_overdue'
+  type: 'requisition_approved' | 'requisition_rejected' | 'requisition_ready_for_pickup' | 'requisition_issued' | 'return_overdue'
   requisition_id: string
   requisition_number: string
   message: string

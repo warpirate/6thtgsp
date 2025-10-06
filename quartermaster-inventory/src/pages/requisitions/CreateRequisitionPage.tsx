@@ -14,7 +14,7 @@ const CreateRequisitionPage: React.FC = () => {
   const [requestType, setRequestType] = useState<RequestType>('self')
   const [priority, setPriority] = useState<Priority>('normal')
   const [purpose, setPurpose] = useState('')
-  const [department, setDepartment] = useState(userProfile?.role || '')
+  const [department, setDepartment] = useState(userProfile?.department || '')
   const [authDocument, setAuthDocument] = useState<File | null>(null)
   const [loading, setLoading] = useState(false)
   const [hasWeapons, setHasWeapons] = useState(false)
@@ -86,7 +86,7 @@ const CreateRequisitionPage: React.FC = () => {
         .from('requisitions')
         .insert({
           requester_id: user.id,
-          department: department || userProfile?.department,
+          department: department,
           request_type: requestType,
           priority,
           purpose,

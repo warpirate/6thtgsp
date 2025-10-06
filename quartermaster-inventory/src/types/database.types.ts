@@ -27,6 +27,7 @@ export type Database = {
           service_number: string | null
           role: UserRole
           email: string | null
+          department: string | null
           is_active: boolean
           created_at: string | null
           updated_at: string | null
@@ -34,13 +35,14 @@ export type Database = {
         }
         Insert: {
           id?: string
-          username: string
-          password_hash: string
+          username?: string
+          password_hash?: string
           full_name: string
           rank?: string | null
           service_number?: string | null
           role?: UserRole
           email?: string | null
+          department?: string | null
           is_active?: boolean
           created_at?: string | null
           updated_at?: string | null
@@ -55,6 +57,7 @@ export type Database = {
           service_number?: string | null
           role?: UserRole
           email?: string | null
+          department?: string | null
           is_active?: boolean
           created_at?: string | null
           updated_at?: string | null

@@ -15,6 +15,7 @@ interface AuthContextType {
   // Loading states
   loading: boolean
   initializing: boolean
+  authReady: boolean
   
   // Authentication methods
   signIn: (email: string, password: string) => Promise<void>
@@ -55,10 +56,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [roleName, setRoleName] = useState<UserRoleName | null>(null)
   const [loading, setLoading] = useState(false)
   const [initializing, setInitializing] = useState(true)
+  const [authReady, setAuthReady] = useState(false)
 
   // Load user profile and role information
-  const loadUserProfile = async (userId: string) => {
+  const loadUserProfile = async (userId: string): Promise<boolean> => {
     try {
+      if ((import.meta as any).env?.DEV) {
+        console.log('Loading user profile for:', userId)
+      }
+      
       const { data: profile, error } = await supabase
         .from('users')
         .select('*')
@@ -67,18 +73,63 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (error) {
         console.error('Error loading user profile:', error)
-        await signOut()
-        return
+        
+        if (error.code === 'PGRST116') {
+          // Row not found - user exists in auth but not in public.users
+          // This means they haven't been properly created by a superadmin
+          console.log('User profile not found - account not properly created')
+          toast.error('Account not found. Please contact your administrator to create your account.')
+          
+          // Sign out the user since they don't have a proper profile
+          await supabase.auth.signOut()
+          return false
+        } else if (error.code === 'PGRST301') {
+          // JWT expired or invalid
+          console.warn('JWT token issue, will be handled by auth state change')
+          return false
+        } else {
+          // For other errors, log but don't sign out immediately
+          console.warn('Profile loading failed with error:', error.code, error.message)
+          // Don't show toast on every refresh failure
+          return false
+        }
       }
 
-      setUserProfile(profile)
-      
-      if (profile.role) {
-        setRole(profile.role as UserRoleName)
-        setRoleName(profile.role as UserRoleName)
+      if (profile) {
+        console.log('Profile loaded successfully:', profile.email)
+        setUserProfile(profile)
+        
+        if (profile.role) {
+          setRole(profile.role as UserRoleName)
+          setRoleName(profile.role as UserRoleName)
+        } else {
+          console.warn('User profile has no role assigned, setting default')
+          // Set default role if none exists
+          try {
+            const { error: updateError } = await supabase
+              .from('users')
+              .update({ role: 'semi_user' })
+              .eq('id', userId)
+            
+            if (!updateError) {
+              setRole('semi_user')
+              setRoleName('semi_user')
+            }
+          } catch (updateError) {
+            console.warn('Failed to set default role:', updateError)
+          }
+          
+          setRole('semi_user')
+          setRoleName('semi_user')
+        }
+        
+        return true
       }
+      
+      return false
     } catch (error) {
-      console.error('Error in loadUserProfile:', error)
+      console.error('Unexpected error in loadUserProfile:', error)
+      return false
     }
   }
 
@@ -86,31 +137,27 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   useEffect(() => {
     let mounted = true
     let authSubscription: any = null
-    let timeoutId: NodeJS.Timeout
 
     const initAuth = async () => {
+      if (!mounted) return
+      
       try {
-        console.log('Initializing auth...')
+        const { data: { session } } = await supabase.auth.getSession()
         
-        // Get initial session
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession()
-        
-        if (error) {
-          console.error('Error getting initial session:', error)
-        } else if (initialSession && mounted) {
-          console.log('Found existing session for:', initialSession.user.email)
-          setSession(initialSession)
-          setUser(initialSession.user)
-          await loadUserProfile(initialSession.user.id)
-        } else {
-          console.log('No existing session found')
+        if (mounted) {
+          if (session?.user) {
+            setSession(session)
+            setUser(session.user)
+            // Load profile async, don't wait for it
+            loadUserProfile(session.user.id)
+          }
+          setInitializing(false)
+          setAuthReady(true)
         }
       } catch (error) {
-        console.error('Error initializing auth:', error)
-      } finally {
         if (mounted) {
-          console.log('Auth initialization complete')
           setInitializing(false)
+          setAuthReady(true)
         }
       }
     }
@@ -118,45 +165,59 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Listen for auth changes
     const setupAuthListener = () => {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
+        (event, session) => {
           if (!mounted) return
 
-          console.log('Auth state changed:', event, session?.user?.email)
+          if (event === 'SIGNED_OUT') {
+            setSession(null)
+            setUser(null)
+            setUserProfile(null)
+            setRole(null)
+            setRoleName(null)
+            return
+          }
+          
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            if (session?.user) {
+              setSession(session)
+              setUser(session.user)
+              // Load profile async
+              loadUserProfile(session.user.id)
+            }
+            return
+          }
 
+          // Handle other events
           setSession(session)
           setUser(session?.user || null)
-
+          
           if (session?.user) {
-            await loadUserProfile(session.user.id)
+            loadUserProfile(session.user.id)
           } else {
             setUserProfile(null)
             setRole(null)
             setRoleName(null)
-          }
-
-          // Ensure initializing is set to false after auth state change
-          if (mounted) {
-            setInitializing(false)
           }
         }
       )
       authSubscription = subscription
     }
 
-    // Failsafe: ensure initializing is set to false after max 5 seconds
-    timeoutId = setTimeout(() => {
-      if (mounted && initializing) {
-        console.warn('Auth initialization timeout - forcing completion')
-        setInitializing(false)
-      }
-    }, 5000)
-
-    initAuth()
+    // Setup listener first, then initialize
     setupAuthListener()
+    initAuth()
+
+    // Failsafe: force initialization completion after 2 seconds
+    const failsafe = setTimeout(() => {
+      if (mounted && initializing) {
+        setInitializing(false)
+        setAuthReady(true)
+      }
+    }, 2000)
 
     return () => {
       mounted = false
-      clearTimeout(timeoutId)
+      clearTimeout(failsafe)
       if (authSubscription) {
         authSubscription.unsubscribe()
       }
@@ -361,13 +422,65 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const hasPermission = (permission: string): boolean => {
     if (!role) return false
     
-    // Permission mapping based on roles
+    // Permission mapping based on corrected workflow:
+    // semi_user (requester) → admin (approver) → user (watchman/issuer)
     const rolePermissions: Record<string, string[]> = {
-      'semi_user': ['create_requisition', 'view_catalog', 'view_own_requisitions'],
-      'user': ['create_requisition', 'view_catalog', 'view_own_requisitions', 'issue_items', 'accept_returns', 'manage_stock'],
-      'admin': ['create_requisition', 'view_catalog', 'view_own_requisitions', 'approve_requisition', 'view_reports', 'view_all_requisitions'],
-      'armory_officer': ['create_requisition', 'view_catalog', 'approve_weapon_requisition', 'issue_weapons', 'manage_weapons', 'view_weapon_register'],
-      'super_admin': ['all']
+      // Semi User: Can only create requisitions and view their own
+      'semi_user': [
+        'create_requisition', 
+        'view_catalog', 
+        'view_own_requisitions',
+        'receive_approved_items',
+        'return_items'  // Semi users can return items issued to them
+      ],
+      
+      // User (Watchman/Store Keeper): Can only issue items AFTER admin approval
+      'user': [
+        'view_catalog',
+        'view_approved_requisitions',  // Can only see approved ones
+        'issue_items',                 // Can mark as issued ONLY if approved by admin
+        'accept_returns',
+        'verify_receipts',             // Can verify stock receipts
+        'manage_stock'
+      ],
+      
+      // Admin: Can approve requisitions and manage inventory
+      'admin': [
+        'create_requisition',
+        'view_catalog',
+        'view_own_requisitions',
+        'view_all_requisitions',
+        'approve_requisition',         // Only admins can approve
+        'reject_requisition',
+        'issue_items',                 // Admins can also issue
+        'accept_returns',
+        'verify_receipts',
+        'approve_receipts',            // Can approve verified receipts
+        'view_reports',
+        'manage_inventory',
+        'manage_stock',
+      ],
+      
+      // Armory Officer: Special role for weapon management
+      'armory_officer': [
+        'create_requisition',
+        'view_catalog',
+        'approve_weapon_requisition',
+        'issue_weapons',
+        'manage_weapons',
+        'view_weapon_register'
+      ],
+      
+      // Super Admin: Full access including user management
+      'super_admin': [
+        'all',
+        'manage_users',
+        'create_user',
+        'edit_user', 
+        'delete_user',
+        'reset_user_password',
+        'toggle_user_status'
+      ]
     }
     
     const userPermissions = rolePermissions[role] || []
@@ -410,6 +523,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     roleName,
     loading,
     initializing,
+    authReady,
     
     // Methods
     signIn,

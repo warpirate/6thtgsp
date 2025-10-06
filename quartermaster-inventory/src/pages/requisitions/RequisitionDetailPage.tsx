@@ -117,13 +117,27 @@ const RequisitionDetailPage: React.FC = () => {
       draft: 'bg-gray-100 text-gray-800 border-gray-200',
       pending: 'bg-blue-100 text-blue-800 border-blue-200',
       approved: 'bg-green-100 text-green-800 border-green-200',
-      ready: 'bg-purple-100 text-purple-800 border-purple-200',
+      ready_for_pickup: 'bg-purple-100 text-purple-800 border-purple-200',
       issued: 'bg-indigo-100 text-indigo-800 border-indigo-200',
       completed: 'bg-teal-100 text-teal-800 border-teal-200',
       rejected: 'bg-red-100 text-red-800 border-red-200',
       cancelled: 'bg-gray-100 text-gray-800 border-gray-200',
     }
     return badges[status as keyof typeof badges] || badges.draft
+  }
+
+  const formatStatusText = (status: string) => {
+    const statusLabels = {
+      draft: 'Draft',
+      pending: 'Pending',
+      approved: 'Approved',
+      ready_for_pickup: 'Ready for Pickup',
+      issued: 'Issued',
+      completed: 'Completed',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
+    }
+    return statusLabels[status as keyof typeof statusLabels] || status.charAt(0).toUpperCase() + status.slice(1)
   }
 
   if (loading) {
@@ -160,7 +174,7 @@ const RequisitionDetailPage: React.FC = () => {
           <div className="flex items-center gap-3 mb-1">
             <h1 className="text-3xl font-bold text-gray-900">{requisition.requisition_number}</h1>
             <span className={`status-badge ${getStatusBadge(requisition.status)}`}>
-              {requisition.status.charAt(0).toUpperCase() + requisition.status.slice(1)}
+              {formatStatusText(requisition.status)}
             </span>
             {requisition.priority !== 'normal' && (
               <span className={`px-3 py-1 rounded text-sm font-medium ${

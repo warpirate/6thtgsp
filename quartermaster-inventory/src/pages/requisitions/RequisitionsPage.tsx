@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Filter, Plus, Eye, Clock, CheckCircle, XCircle, Package } from 'lucide-react'
+import { Search, Filter, Plus, Eye, Clock, CheckCircle, XCircle, Package, Send } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { RequisitionWithDetails, RequisitionStatus } from '@/types'
@@ -73,7 +73,7 @@ const RequisitionsPage: React.FC = () => {
       draft: 'bg-gray-100 text-gray-800 border-gray-200',
       pending: 'bg-blue-100 text-blue-800 border-blue-200',
       approved: 'bg-green-100 text-green-800 border-green-200',
-      ready: 'bg-purple-100 text-purple-800 border-purple-200',
+      ready_for_pickup: 'bg-purple-100 text-purple-800 border-purple-200',
       issued: 'bg-indigo-100 text-indigo-800 border-indigo-200',
       completed: 'bg-teal-100 text-teal-800 border-teal-200',
       rejected: 'bg-red-100 text-red-800 border-red-200',
@@ -86,8 +86,11 @@ const RequisitionsPage: React.FC = () => {
     switch (status) {
       case 'pending': return <Clock className="w-4 h-4" />
       case 'approved': return <CheckCircle className="w-4 h-4" />
+      case 'ready_for_pickup': return <Package className="w-4 h-4" />
+      case 'issued': return <Send className="w-4 h-4" />
+      case 'completed': return <CheckCircle className="w-4 h-4" />
       case 'rejected': return <XCircle className="w-4 h-4" />
-      case 'completed': return <Package className="w-4 h-4" />
+      case 'cancelled': return <XCircle className="w-4 h-4" />
       default: return <Clock className="w-4 h-4" />
     }
   }
@@ -99,6 +102,20 @@ const RequisitionsPage: React.FC = () => {
       emergency: 'bg-red-100 text-red-700',
     }
     return badges[priority as keyof typeof badges] || badges.normal
+  }
+
+  const formatStatusText = (status: RequisitionStatus) => {
+    const statusLabels = {
+      draft: 'Draft',
+      pending: 'Pending',
+      approved: 'Approved',
+      ready_for_pickup: 'Ready for Pickup',
+      issued: 'Issued',
+      completed: 'Completed',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled',
+    }
+    return statusLabels[status] || status.charAt(0).toUpperCase() + status.slice(1)
   }
 
   return (
@@ -152,7 +169,7 @@ const RequisitionsPage: React.FC = () => {
               <option value="draft">Draft</option>
               <option value="pending">Pending</option>
               <option value="approved">Approved</option>
-              <option value="ready">Ready</option>
+              <option value="ready_for_pickup">Ready for Pickup</option>
               <option value="issued">Issued</option>
               <option value="completed">Completed</option>
               <option value="rejected">Rejected</option>
@@ -201,7 +218,7 @@ const RequisitionsPage: React.FC = () => {
                       </h3>
                       <span className={`status-badge ${getStatusBadge(requisition.status)} flex items-center gap-1`}>
                         {getStatusIcon(requisition.status)}
-                        {requisition.status.charAt(0).toUpperCase() + requisition.status.slice(1)}
+                        {formatStatusText(requisition.status)}
                       </span>
                       {requisition.priority !== 'normal' && (
                         <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityBadge(requisition.priority)}`}>
