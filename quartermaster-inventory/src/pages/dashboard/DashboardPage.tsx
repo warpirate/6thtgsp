@@ -13,49 +13,28 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { UserRole } from '@/types'
+import { useDashboardStats, useRecentActivities } from '@/hooks'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { formatDistanceToNow } from 'date-fns'
 
 const DashboardPage: React.FC = () => {
   const { userProfile, roleName, hasPermission } = useAuth()
+  const { data: stats, isLoading: statsLoading } = useDashboardStats()
+  const { data: activities, isLoading: activitiesLoading } = useRecentActivities(5)
 
-  // Mock data - in real app, this would come from API
-  const stats = {
-    totalReceipts: 1247,
-    pendingApprovals: 23,
-    approvedToday: 15,
-    rejectedToday: 2,
-    myDrafts: 3,
-    myPendingVerification: 7,
+  if (statsLoading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
   }
-
-  const recentActivities = [
-    {
-      id: '1',
-      type: 'approval',
-      message: 'Receipt REC-2024-001234 was approved',
-      time: '2 minutes ago',
-      user: 'John Admin',
-    },
-    {
-      id: '2',
-      type: 'submission',
-      message: 'New receipt REC-2024-001235 submitted for verification',
-      time: '15 minutes ago',
-      user: 'Jane User',
-    },
-    {
-      id: '3',
-      type: 'verification',
-      message: 'Receipt REC-2024-001233 was verified',
-      time: '1 hour ago',
-      user: 'Mike Verifier',
-    },
-  ]
 
   const pendingTasks = [
     {
       id: '1',
       title: 'Verify submitted receipts',
-      count: 5,
+      count: stats?.pendingApprovals || 0,
       href: '/approvals',
       icon: CheckCircle,
       color: 'text-blue-600',
@@ -64,7 +43,7 @@ const DashboardPage: React.FC = () => {
     {
       id: '2',
       title: 'Review rejected receipts',
-      count: 2,
+      count: stats?.rejectedToday || 0,
       href: '/receipts?status=rejected',
       icon: XCircle,
       color: 'text-red-600',
@@ -73,7 +52,7 @@ const DashboardPage: React.FC = () => {
     {
       id: '3',
       title: 'Complete draft receipts',
-      count: 3,
+      count: stats?.myDrafts || 0,
       href: '/receipts?status=draft',
       icon: FileText,
       color: 'text-yellow-600',
@@ -136,7 +115,7 @@ const DashboardPage: React.FC = () => {
           <>
             <QuickStatCard
               title="My Drafts"
-              value={stats.myDrafts}
+              value={stats?.myDrafts || 0}
               icon={FileText}
               color="text-gray-600"
               bgColor="bg-gray-50"
@@ -144,7 +123,7 @@ const DashboardPage: React.FC = () => {
             />
             <QuickStatCard
               title="Submitted Today"
-              value={5}
+              value={stats?.myPendingVerification || 0}
               icon={TrendingUp}
               color="text-blue-600"
               bgColor="bg-blue-50"
@@ -156,7 +135,7 @@ const DashboardPage: React.FC = () => {
           <>
             <QuickStatCard
               title="Pending Verification"
-              value={stats.myPendingVerification}
+              value={stats?.myPendingVerification || 0}
               icon={Clock}
               color="text-yellow-600"
               bgColor="bg-yellow-50"
@@ -164,7 +143,7 @@ const DashboardPage: React.FC = () => {
             />
             <QuickStatCard
               title="Verified Today"
-              value={12}
+              value={stats?.approvedToday || 0}
               icon={CheckCircle}
               color="text-green-600"
               bgColor="bg-green-50"
@@ -176,7 +155,7 @@ const DashboardPage: React.FC = () => {
           <>
             <QuickStatCard
               title="Total Receipts"
-              value={stats.totalReceipts}
+              value={stats?.totalReceipts || 0}
               icon={Package}
               color="text-blue-600"
               bgColor="bg-blue-50"
@@ -184,7 +163,7 @@ const DashboardPage: React.FC = () => {
             />
             <QuickStatCard
               title="Pending Approvals"
-              value={stats.pendingApprovals}
+              value={stats?.pendingApprovals || 0}
               icon={Clock}
               color="text-yellow-600"
               bgColor="bg-yellow-50"
@@ -192,14 +171,14 @@ const DashboardPage: React.FC = () => {
             />
             <QuickStatCard
               title="Approved Today"
-              value={stats.approvedToday}
+              value={stats?.approvedToday || 0}
               icon={CheckCircle}
               color="text-green-600"
               bgColor="bg-green-50"
             />
             <QuickStatCard
               title="Rejected Today"
-              value={stats.rejectedToday}
+              value={stats?.rejectedToday || 0}
               icon={XCircle}
               color="text-red-600"
               bgColor="bg-red-50"
@@ -257,27 +236,37 @@ const DashboardPage: React.FC = () => {
               </p>
             </div>
             <div className="card-content">
-              <div className="space-y-4">
-                {recentActivities.map((activity) => (
-                  <div key={activity.id} className="flex items-start gap-3">
-                    <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm text-foreground">
-                        {activity.message}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <p className="text-xs text-muted-foreground">
-                          by {activity.user}
+              {activitiesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              ) : !activities || activities.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  No recent activities
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="flex items-start gap-3">
+                      <div className="w-2 h-2 bg-primary rounded-full mt-2 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-foreground">
+                          {activity.action} on {activity.table_name}
                         </p>
-                        <span className="text-xs text-muted-foreground">•</span>
-                        <p className="text-xs text-muted-foreground">
-                          {activity.time}
-                        </p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="text-xs text-muted-foreground">
+                            by {activity.user?.full_name || 'System'}
+                          </p>
+                          <span className="text-xs text-muted-foreground">•</span>
+                          <p className="text-xs text-muted-foreground">
+                            {activity.timestamp ? formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }) : 'Recently'}
+                          </p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
               <div className="mt-4 pt-4 border-t">
                 <Link
                   to="/audit"

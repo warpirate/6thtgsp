@@ -3,52 +3,35 @@ import { Link } from 'react-router-dom'
 import { CheckCircle, XCircle, Clock, Package, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { ReceiptStatus } from '@/types'
-
-// Mock data - replace with actual API calls
-const mockPendingReceipts = [
-  {
-    id: '2',
-    receipt_id: 'REC-2024-002',
-    item_name: 'Office Chairs',
-    quantity: 20,
-    unit: 'units',
-    status: 'submitted' as ReceiptStatus,
-    created_at: '2024-10-02T14:30:00Z',
-    submitted_at: '2024-10-02T14:30:00Z',
-    created_by_user: { full_name: 'Jane Doe' },
-  },
-  {
-    id: '4',
-    receipt_id: 'REC-2024-004',
-    item_name: 'Network Cables',
-    quantity: 50,
-    unit: 'meters',
-    status: 'verified' as ReceiptStatus,
-    created_at: '2024-10-03T11:00:00Z',
-    verified_at: '2024-10-03T15:00:00Z',
-    created_by_user: { full_name: 'Sarah Wilson' },
-  },
-]
-
-const mockHistory = [
-  {
-    id: '1',
-    receipt_id: 'REC-2024-001',
-    item_name: 'Laptop Dell XPS 15',
-    quantity: 5,
-    unit: 'units',
-    status: 'approved' as ReceiptStatus,
-    action: 'approved' as const,
-    action_date: '2024-10-01T16:00:00Z',
-    action_by: 'Current User',
-    created_by_user: { full_name: 'John Smith' },
-  },
-]
+import { usePendingApprovals, useVerifyReceipt, useApproveReceipt, useRejectReceipt } from '@/hooks'
+import { useAuditLogs } from '@/hooks'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { toast } from 'react-hot-toast'
 
 const ApprovalsPage: React.FC = () => {
-  const { roleName, hasPermission } = useAuth()
+  const { roleName, hasPermission, userProfile } = useAuth()
   const [activeTab, setActiveTab] = useState<'pending' | 'history'>('pending')
   const [selectedReceipts, setSelectedReceipts] = useState<string[]>([])
+  const [actionComments, setActionComments] = useState<Record<string, string>>({})
+
+  // Fetch pending approvals
+  const { data: pendingData, isLoading: pendingLoading } = usePendingApprovals()
+  const receipts = pendingData?.data || []
+
+  // Fetch approval history
+  const historyFilters = React.useMemo(() => {
+    const f: any = { table_name: 'stock_receipts', action: 'UPDATE' }
+    if (userProfile?.id) f.user_id = userProfile.id
+    return f
+  }, [userProfile?.id])
+
+  const { data: historyData, isLoading: historyLoading } = useAuditLogs(historyFilters, 1, 50)
+  const history = historyData?.data || []
+
+  // Mutations
+  const { mutate: verify, isPending: isVerifying } = useVerifyReceipt()
+  const { mutate: approve, isPending: isApproving } = useApproveReceipt()
+  const { mutate: reject, isPending: isRejecting } = useRejectReceipt()
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -84,11 +67,62 @@ const ApprovalsPage: React.FC = () => {
   }
 
   const handleSelectAll = () => {
-    if (selectedReceipts.length === mockPendingReceipts.length) {
+    if (selectedReceipts.length === receipts.length) {
       setSelectedReceipts([])
     } else {
-      setSelectedReceipts(mockPendingReceipts.map((r) => r.id))
+      setSelectedReceipts(receipts.map((r) => r.id))
     }
+  }
+
+  const handleVerify = (id: string) => {
+    const comments = actionComments[id]
+    verify({ id, comments }, {
+      onSuccess: () => {
+        setSelectedReceipts(prev => prev.filter(rid => rid !== id))
+        setActionComments(prev => ({ ...prev, [id]: '' }))
+      }
+    })
+  }
+
+  const handleApprove = (id: string) => {
+    const comments = actionComments[id]
+    approve({ id, comments }, {
+      onSuccess: () => {
+        setSelectedReceipts(prev => prev.filter(rid => rid !== id))
+        setActionComments(prev => ({ ...prev, [id]: '' }))
+      }
+    })
+  }
+
+  const handleReject = (id: string) => {
+    const comments = actionComments[id] || ''
+    if (!comments.trim()) {
+      toast.error('Please provide a reason for rejection')
+      return
+    }
+    reject({ id, comments }, {
+      onSuccess: () => {
+        setSelectedReceipts(prev => prev.filter(rid => rid !== id))
+        setActionComments(prev => ({ ...prev, [id]: '' }))
+      }
+    })
+  }
+
+  const handleBulkAction = (action: 'verify' | 'approve' | 'reject') => {
+    if (selectedReceipts.length === 0) {
+      toast.error('Please select at least one receipt')
+      return
+    }
+
+    if (action === 'reject') {
+      toast.error('Bulk reject is not supported. Please reject receipts individually with comments.')
+      return
+    }
+
+    selectedReceipts.forEach(id => {
+      if (action === 'verify') handleVerify(id)
+      else if (action === 'approve') handleApprove(id)
+    })
   }
 
   const canVerify = hasPermission('verify_receipt')
@@ -117,7 +151,7 @@ const ApprovalsPage: React.FC = () => {
           >
             Pending Approvals
             <span className="ml-2 bg-primary/10 text-primary px-2 py-0.5 rounded-full text-xs">
-              {mockPendingReceipts.length}
+              {pendingLoading ? '...' : receipts.length}
             </span>
           </button>
           <button
@@ -134,7 +168,11 @@ const ApprovalsPage: React.FC = () => {
       </div>
 
       {/* Pending Approvals Tab */}
-      {activeTab === 'pending' && (
+      {activeTab === 'pending' && pendingLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <LoadingSpinner size="lg" />
+        </div>
+      ) : activeTab === 'pending' && (
         <div className="space-y-4">
           {/* Bulk Actions */}
           {selectedReceipts.length > 0 && (
@@ -144,14 +182,26 @@ const ApprovalsPage: React.FC = () => {
                   {selectedReceipts.length} receipt(s) selected
                 </span>
                 <div className="flex gap-3">
-                  <button className="btn btn-success btn-sm">
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Approve Selected
-                  </button>
-                  <button className="btn btn-danger btn-sm">
-                    <XCircle className="w-4 h-4 mr-2" />
-                    Reject Selected
-                  </button>
+                  {canVerify && (
+                    <button 
+                      onClick={() => handleBulkAction('verify')}
+                      disabled={isVerifying}
+                      className="btn btn-success btn-sm"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Verify Selected
+                    </button>
+                  )}
+                  {canApprove && (
+                    <button 
+                      onClick={() => handleBulkAction('approve')}
+                      disabled={isApproving}
+                      className="btn btn-success btn-sm"
+                    >
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      Approve Selected
+                    </button>
+                  )}
                   <button
                     onClick={() => setSelectedReceipts([])}
                     className="btn btn-secondary btn-sm"
@@ -164,11 +214,11 @@ const ApprovalsPage: React.FC = () => {
           )}
 
           {/* Select All */}
-          {mockPendingReceipts.length > 0 && (
+          {receipts.length > 0 && (
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
-                checked={selectedReceipts.length === mockPendingReceipts.length}
+                checked={selectedReceipts.length === receipts.length && receipts.length > 0}
                 onChange={handleSelectAll}
                 className="rounded border-gray-300"
               />
@@ -177,7 +227,7 @@ const ApprovalsPage: React.FC = () => {
           )}
 
           {/* Receipt Cards */}
-          {mockPendingReceipts.length === 0 ? (
+          {receipts.length === 0 ? (
             <div className="card p-12 text-center">
               <CheckCircle className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-2 text-sm font-medium text-foreground">No pending approvals</h3>
@@ -187,7 +237,7 @@ const ApprovalsPage: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-4">
-              {mockPendingReceipts.map((receipt) => (
+              {receipts.map((receipt) => (
                 <div key={receipt.id} className="card p-6">
                   <div className="flex items-start gap-4">
                     {/* Checkbox */}
@@ -206,32 +256,32 @@ const ApprovalsPage: React.FC = () => {
                             to={`/receipts/${receipt.id}`}
                             className="text-lg font-semibold text-primary hover:text-primary/80"
                           >
-                            {receipt.receipt_id}
+                            {receipt.grn_number}
                           </Link>
                           {getStatusBadge(receipt.status)}
                         </div>
                         <span className="text-sm text-muted-foreground">
-                          {formatDate(receipt.submitted_at || receipt.created_at)}
+                          {formatDate(receipt.created_at || receipt.receipt_date)}
                         </span>
                       </div>
 
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
                         <div>
-                          <div className="text-xs text-muted-foreground mb-1">Item</div>
+                          <div className="text-xs text-muted-foreground mb-1">Supplier</div>
                           <div className="text-sm font-medium text-foreground">
-                            {receipt.item_name}
+                            {receipt.supplier_name}
                           </div>
                         </div>
                         <div>
-                          <div className="text-xs text-muted-foreground mb-1">Quantity</div>
+                          <div className="text-xs text-muted-foreground mb-1">Challan No</div>
                           <div className="text-sm font-medium text-foreground">
-                            {receipt.quantity} {receipt.unit}
+                            {receipt.challan_number}
                           </div>
                         </div>
                         <div>
-                          <div className="text-xs text-muted-foreground mb-1">Submitted By</div>
+                          <div className="text-xs text-muted-foreground mb-1">Received By</div>
                           <div className="text-sm font-medium text-foreground">
-                            {receipt.created_by_user.full_name}
+                            {receipt.received_by_user?.full_name || 'Unknown'}
                           </div>
                         </div>
                         <div>
@@ -241,6 +291,20 @@ const ApprovalsPage: React.FC = () => {
                             {receipt.status === 'verified' && 'Awaiting Approval'}
                           </div>
                         </div>
+                      </div>
+
+                      {/* Comments Input */}
+                      <div className="mb-4">
+                        <label className="text-xs text-muted-foreground mb-1 block">
+                          Comments (optional for approval/verify, required for reject)
+                        </label>
+                        <input
+                          type="text"
+                          value={actionComments[receipt.id] || ''}
+                          onChange={(e) => setActionComments(prev => ({ ...prev, [receipt.id]: e.target.value }))}
+                          placeholder="Add your comments..."
+                          className="input text-sm"
+                        />
                       </div>
 
                       {/* Actions */}
@@ -254,26 +318,42 @@ const ApprovalsPage: React.FC = () => {
 
                         {receipt.status === 'submitted' && canVerify && (
                           <>
-                            <button className="btn btn-success btn-sm">
+                            <button 
+                              onClick={() => handleVerify(receipt.id)}
+                              disabled={isVerifying}
+                              className="btn btn-success btn-sm"
+                            >
                               <CheckCircle className="w-4 h-4 mr-1" />
-                              Verify
+                              {isVerifying ? 'Verifying...' : 'Verify'}
                             </button>
-                            <button className="btn btn-danger btn-sm">
+                            <button 
+                              onClick={() => handleReject(receipt.id)}
+                              disabled={isRejecting}
+                              className="btn btn-danger btn-sm"
+                            >
                               <XCircle className="w-4 h-4 mr-1" />
-                              Reject
+                              {isRejecting ? 'Rejecting...' : 'Reject'}
                             </button>
                           </>
                         )}
 
                         {receipt.status === 'verified' && canApprove && (
                           <>
-                            <button className="btn btn-success btn-sm">
+                            <button 
+                              onClick={() => handleApprove(receipt.id)}
+                              disabled={isApproving}
+                              className="btn btn-success btn-sm"
+                            >
                               <CheckCircle className="w-4 h-4 mr-1" />
-                              Approve
+                              {isApproving ? 'Approving...' : 'Approve'}
                             </button>
-                            <button className="btn btn-danger btn-sm">
+                            <button 
+                              onClick={() => handleReject(receipt.id)}
+                              disabled={isRejecting}
+                              className="btn btn-danger btn-sm"
+                            >
                               <XCircle className="w-4 h-4 mr-1" />
-                              Reject
+                              {isRejecting ? 'Rejecting...' : 'Reject'}
                             </button>
                           </>
                         )}
@@ -288,9 +368,13 @@ const ApprovalsPage: React.FC = () => {
       )}
 
       {/* History Tab */}
-      {activeTab === 'history' && (
+      {activeTab === 'history' && historyLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <LoadingSpinner size="lg" />
+        </div>
+      ) : activeTab === 'history' && (
         <div className="space-y-4">
-          {mockHistory.length === 0 ? (
+          {history.length === 0 ? (
             <div className="card p-12 text-center">
               <Clock className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-2 text-sm font-medium text-foreground">No history yet</h3>
@@ -322,40 +406,29 @@ const ApprovalsPage: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-card divide-y divide-border">
-                    {mockHistory.map((item) => (
+                    {history.map((item) => (
                       <tr key={item.id} className="hover:bg-muted/50">
                         <td className="px-6 py-4 whitespace-nowrap">
                           <Link
-                            to={`/receipts/${item.id}`}
+                            to={`/receipts/${item.record_id}`}
                             className="text-sm font-medium text-primary hover:text-primary/80"
                           >
-                            {item.receipt_id}
+                            {item.record_id?.slice(0, 8)}...
                           </Link>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="text-sm text-foreground">{item.item_name}</div>
+                          <div className="text-sm text-foreground">{item.table_name}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              item.action === 'approved'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {item.action === 'approved' ? (
-                              <CheckCircle className="w-3 h-3" />
-                            ) : (
-                              <XCircle className="w-3 h-3" />
-                            )}
-                            {item.action.charAt(0).toUpperCase() + item.action.slice(1)}
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {item.action}
                           </span>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
-                          {formatDate(item.action_date)}
+                          {formatDate(item.timestamp || new Date().toISOString())}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-foreground">
-                          {item.created_by_user.full_name}
+                          {item.user?.full_name || 'System'}
                         </td>
                       </tr>
                     ))}

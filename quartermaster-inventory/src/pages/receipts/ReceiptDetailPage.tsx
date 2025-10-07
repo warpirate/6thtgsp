@@ -9,41 +9,62 @@ import {
   Edit,
   Trash2,
   Download,
-  FileText
+  FileText,
+  AlertCircle
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { ReceiptStatus } from '@/types'
-
-// Mock receipt data - replace with actual API call
-const mockReceipt = {
-  id: '1',
-  receipt_id: 'REC-2024-001',
-  item_name: 'Laptop Dell XPS 15',
-  quantity: 5,
-  unit: 'units',
-  description: 'High-performance laptops for development team',
-  unit_price: 1299.99,
-  supplier: 'Dell Direct',
-  purchase_date: '2024-09-25',
-  status: 'submitted' as ReceiptStatus,
-  created_at: '2024-10-01T10:00:00Z',
-  submitted_at: '2024-10-01T14:00:00Z',
-  verified_at: null as string | null,
-  approved_at: null as string | null,
-  created_by_user: { id: '1', full_name: 'John Smith' },
-  verified_by_user: null as { id: string; full_name: string } | null,
-  approved_by_user: null as { id: string; full_name: string } | null,
-  rejection_reason: null as string | null,
-}
+import { 
+  useReceipt, 
+  useVerifyReceipt, 
+  useApproveReceipt, 
+  useRejectReceipt,
+  useDeleteReceipt,
+  useReceiptDocuments 
+} from '@/hooks'
+import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { toast } from 'react-hot-toast'
 
 const ReceiptDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { userProfile, roleName, hasPermission } = useAuth()
-  const [receipt] = useState(mockReceipt)
   const [showActionModal, setShowActionModal] = useState(false)
   const [actionType, setActionType] = useState<'verify' | 'approve' | 'reject' | null>(null)
   const [comments, setComments] = useState('')
+
+  // Fetch receipt data
+  const { data: receipt, isLoading, error } = useReceipt(id!)
+  const { data: documents } = useReceiptDocuments(id!)
+  
+  // Mutations
+  const { mutate: verify, isPending: isVerifying } = useVerifyReceipt()
+  const { mutate: approve, isPending: isApproving } = useApproveReceipt()
+  const { mutate: reject, isPending: isRejecting } = useRejectReceipt()
+  const { mutate: deleteReceipt, isPending: isDeleting } = useDeleteReceipt()
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (error || !receipt) {
+    return (
+      <div className="max-w-4xl mx-auto p-6">
+        <div className="text-center py-12">
+          <AlertCircle className="mx-auto h-12 w-12 text-red-500" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">Receipt not found</h3>
+          <p className="mt-1 text-sm text-gray-500">The receipt you're looking for doesn't exist.</p>
+          <Link to="/receipts" className="mt-4 btn btn-primary">
+            Back to Receipts
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   const getStatusBadge = (status: ReceiptStatus) => {
     const config = {
@@ -76,28 +97,65 @@ const ReceiptDetailPage: React.FC = () => {
     })
   }
 
-  const canEdit = receipt.status === 'draft' && receipt.created_by_user.id === userProfile?.id
-  const canDelete = receipt.status === 'draft' && receipt.created_by_user.id === userProfile?.id
+  const canEdit = receipt.status === 'draft' && receipt.received_by === userProfile?.id
+  const canDelete = receipt.status === 'draft' && receipt.received_by === userProfile?.id
   const canVerify = receipt.status === 'submitted' && hasPermission('verify_receipt')
   const canApprove = receipt.status === 'verified' && hasPermission('approve_receipt')
 
-  const handleAction = (type: 'verify' | 'approve' | 'reject') => {
-    setActionType(type)
-    setShowActionModal(true)
+  const handleAction = () => {
+    if (!actionType) return
+    
+    const data = { id: receipt.id, comments }
+    
+    switch (actionType) {
+      case 'verify':
+        verify(data, {
+          onSuccess: () => {
+            toast.success('Receipt verified successfully!')
+            setShowActionModal(false)
+            setComments('')
+          }
+        })
+        break
+      case 'approve':
+        approve(data, {
+          onSuccess: () => {
+            toast.success('Receipt approved successfully!')
+            setShowActionModal(false)
+            setComments('')
+          }
+        })
+        break
+      case 'reject':
+        if (!comments.trim()) {
+          toast.error('Please provide a reason for rejection')
+          return
+        }
+        reject(data, {
+          onSuccess: () => {
+            toast.success('Receipt rejected successfully!')
+            setShowActionModal(false)
+            setComments('')
+          }
+        })
+        break
+    }
   }
 
-  const confirmAction = async () => {
-    try {
-      // TODO: Call API to perform action
-      console.log(`${actionType} receipt with comments:`, comments)
-      alert(`Receipt ${actionType}d successfully!`)
-      setShowActionModal(false)
-      setComments('')
-      // Refresh receipt data here
-    } catch (error) {
-      console.error('Error performing action:', error)
-      alert('Failed to perform action')
+  const handleDelete = () => {
+    if (window.confirm('Are you sure you want to delete this receipt? This action cannot be undone.')) {
+      deleteReceipt(receipt.id, {
+        onSuccess: () => {
+          toast.success('Receipt deleted successfully!')
+          navigate('/receipts')
+        }
+      })
     }
+  }
+
+  const handleActionClick = (type: 'verify' | 'approve' | 'reject') => {
+    setActionType(type)
+    setShowActionModal(true)
   }
 
   const timeline = [
@@ -105,31 +163,38 @@ const ReceiptDetailPage: React.FC = () => {
       status: 'created',
       label: 'Created',
       date: receipt.created_at,
-      user: receipt.created_by_user?.full_name,
+      user: receipt.received_by_user?.full_name || 'Unknown',
       completed: true,
     },
     {
       status: 'submitted',
       label: 'Submitted',
-      date: receipt.submitted_at,
-      user: receipt.created_by_user?.full_name,
-      completed: !!receipt.submitted_at,
+      date: receipt.status !== 'draft' ? receipt.created_at : null,
+      user: receipt.received_by_user?.full_name || 'Unknown',
+      completed: receipt.status !== 'draft',
     },
     {
       status: 'verified',
       label: 'Verified',
       date: receipt.verified_at,
-      user: receipt.verified_by_user?.full_name,
+      user: receipt.verified_by_user?.full_name || 'Unknown',
       completed: !!receipt.verified_at,
     },
     {
       status: 'approved',
       label: 'Approved',
       date: receipt.approved_at,
-      user: receipt.approved_by_user?.full_name,
+      user: receipt.approved_by_user?.full_name || 'Unknown',
       completed: !!receipt.approved_at,
     },
-  ]
+  ].filter((item, index) => {
+    // Don't show future steps for rejected receipts
+    if (receipt.status === 'rejected') {
+      if (item.status === 'approved') return false
+      if (item.status === 'verified' && !receipt.verified_at) return false
+    }
+    return true
+  })
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
@@ -144,7 +209,7 @@ const ReceiptDetailPage: React.FC = () => {
         </button>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">{receipt.receipt_id}</h1>
+            <h1 className="text-3xl font-bold text-foreground">{receipt.grn_number}</h1>
             <p className="mt-1 text-muted-foreground">
               Created on {formatDate(receipt.created_at)}
             </p>
@@ -205,36 +270,38 @@ const ReceiptDetailPage: React.FC = () => {
           <h2 className="text-lg font-semibold text-foreground">Item Details</h2>
           
           <div>
-            <div className="text-sm font-medium text-muted-foreground">Item Name</div>
-            <div className="text-foreground">{receipt.item_name}</div>
+            <div className="text-sm font-medium text-muted-foreground">Supplier Name</div>
+            <div className="text-foreground">{receipt.supplier_name}</div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Quantity</div>
-              <div className="text-foreground">{receipt.quantity} {receipt.unit}</div>
+              <div className="text-sm font-medium text-muted-foreground">Challan Number</div>
+              <div className="text-foreground">{receipt.challan_number}</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Unit Price</div>
+              <div className="text-sm font-medium text-muted-foreground">Challan Date</div>
               <div className="text-foreground">
-                {receipt.unit_price ? `$${receipt.unit_price.toFixed(2)}` : '-'}
+                {formatDate(receipt.challan_date)}
               </div>
             </div>
           </div>
 
-          <div>
-            <div className="text-sm font-medium text-muted-foreground">Total Value</div>
-            <div className="text-lg font-semibold text-foreground">
-              {receipt.unit_price
-                ? `$${(receipt.quantity * receipt.unit_price).toFixed(2)}`
-                : '-'}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-sm font-medium text-muted-foreground">Receipt Date</div>
+              <div className="text-foreground">{formatDate(receipt.receipt_date)}</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground">Vehicle Number</div>
+              <div className="text-foreground">{receipt.vehicle_number || '-'}</div>
             </div>
           </div>
 
-          {receipt.description && (
+          {receipt.remarks && (
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Description</div>
-              <div className="text-foreground">{receipt.description}</div>
+              <div className="text-sm font-medium text-muted-foreground">Remarks</div>
+              <div className="text-foreground">{receipt.remarks}</div>
             </div>
           )}
         </div>
@@ -242,31 +309,47 @@ const ReceiptDetailPage: React.FC = () => {
         <div className="card p-6 space-y-4">
           <h2 className="text-lg font-semibold text-foreground">Additional Information</h2>
           
-          {receipt.supplier && (
-            <div>
-              <div className="text-sm font-medium text-muted-foreground">Supplier</div>
-              <div className="text-foreground">{receipt.supplier}</div>
-            </div>
-          )}
+          <div>
+            <div className="text-sm font-medium text-muted-foreground">Received By</div>
+            <div className="text-foreground">{receipt.received_by_user?.full_name || 'Unknown'}</div>
+          </div>
 
-          {receipt.purchase_date && (
+          <div>
+            <div className="text-sm font-medium text-muted-foreground">Created At</div>
+            <div className="text-foreground">{formatDate(receipt.created_at)}</div>
+          </div>
+
+          {/* Documents Section */}
+          {documents && documents.length > 0 && (
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Purchase Date</div>
-              <div className="text-foreground">
-                {new Date(receipt.purchase_date).toLocaleDateString()}
+              <div className="text-sm font-medium text-muted-foreground mb-2">Attached Documents</div>
+              <div className="space-y-2">
+                {documents.map((doc) => (
+                  <div key={doc.id} className="flex items-center justify-between p-2 border rounded">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm">{doc.file_name}</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        // Use file_path or construct download URL
+                        const downloadUrl = doc.file_path || `/api/documents/${doc.id}/download`
+                        window.open(downloadUrl, '_blank')
+                      }}
+                      className="text-blue-600 hover:text-blue-800 text-sm"
+                    >
+                      <Download className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
-          <div>
-            <div className="text-sm font-medium text-muted-foreground">Created By</div>
-            <div className="text-foreground">{receipt.created_by_user.full_name}</div>
-          </div>
-
-          {receipt.rejection_reason && (
+          {receipt.status === 'rejected' && receipt.remarks && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
               <div className="text-sm font-medium text-red-800 mb-1">Rejection Reason</div>
-              <div className="text-sm text-red-700">{receipt.rejection_reason}</div>
+              <div className="text-sm text-red-700">{receipt.remarks}</div>
             </div>
           )}
         </div>
@@ -283,27 +366,33 @@ const ReceiptDetailPage: React.FC = () => {
           )}
 
           {canDelete && (
-            <button className="btn btn-danger flex items-center gap-2">
+            <button 
+              onClick={handleDelete}
+              disabled={isDeleting}
+              className="btn btn-danger flex items-center gap-2"
+            >
               <Trash2 className="w-4 h-4" />
-              Delete
+              {isDeleting ? 'Deleting...' : 'Delete'}
             </button>
           )}
 
           {canVerify && (
             <>
               <button
-                onClick={() => handleAction('verify')}
+                onClick={() => handleActionClick('verify')}
+                disabled={isVerifying}
                 className="btn btn-success flex items-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
-                Verify Receipt
+                {isVerifying ? 'Verifying...' : 'Verify Receipt'}
               </button>
               <button
-                onClick={() => handleAction('reject')}
+                onClick={() => handleActionClick('reject')}
+                disabled={isRejecting}
                 className="btn btn-danger flex items-center gap-2"
               >
                 <XCircle className="w-4 h-4" />
-                Reject
+                {isRejecting ? 'Rejecting...' : 'Reject'}
               </button>
             </>
           )}
@@ -311,18 +400,20 @@ const ReceiptDetailPage: React.FC = () => {
           {canApprove && (
             <>
               <button
-                onClick={() => handleAction('approve')}
+                onClick={() => handleActionClick('approve')}
+                disabled={isApproving}
                 className="btn btn-success flex items-center gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
-                Approve Receipt
+                {isApproving ? 'Approving...' : 'Approve Receipt'}
               </button>
               <button
-                onClick={() => handleAction('reject')}
+                onClick={() => handleActionClick('reject')}
+                disabled={isRejecting}
                 className="btn btn-danger flex items-center gap-2"
               >
                 <XCircle className="w-4 h-4" />
-                Reject
+                {isRejecting ? 'Rejecting...' : 'Reject'}
               </button>
             </>
           )}
@@ -367,11 +458,11 @@ const ReceiptDetailPage: React.FC = () => {
                 Cancel
               </button>
               <button
-                onClick={confirmAction}
+                onClick={handleAction}
+                disabled={(actionType === 'reject' && !comments.trim()) || isVerifying || isApproving || isRejecting}
                 className={`btn ${actionType === 'reject' ? 'btn-danger' : 'btn-success'} flex-1`}
-                disabled={actionType === 'reject' && !comments.trim()}
               >
-                Confirm
+                {isVerifying || isApproving || isRejecting ? 'Processing...' : 'Confirm'}
               </button>
             </div>
           </div>
