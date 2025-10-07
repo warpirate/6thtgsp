@@ -2,6 +2,12 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
+const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 interface CreateUserBody {
   email?: string;
   full_name: string;
@@ -22,6 +28,10 @@ function genTempPassword(prefix = "QM"): string {
 }
 
 Deno.serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   try {
     const url =
       Deno.env.get("PROJECT_URL") ??
@@ -33,7 +43,7 @@ Deno.serve(async (req) => {
       Deno.env.get("ANON_KEY") ??
       Deno.env.get("SUPABASE_ANON_KEY");
     if (!url || !serviceKey || !anonKey) {
-      return new Response(JSON.stringify({ success: false, message: "Missing Supabase env" }), { status: 500 });
+      return new Response(JSON.stringify({ success: false, message: "Missing Supabase env" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Admin client for privileged operations
@@ -46,16 +56,16 @@ Deno.serve(async (req) => {
     // Check caller
     const { data: userData } = await authed.auth.getUser();
     const callerId = userData?.user?.id;
-    if (!callerId) return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401 });
+    if (!callerId) return new Response(JSON.stringify({ success: false, message: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const { data: callerProfile } = await admin.from("users").select("role").eq("id", callerId).single();
     if (!callerProfile || callerProfile.role !== "super_admin") {
-      return new Response(JSON.stringify({ success: false, message: "Forbidden" }), { status: 403 });
+      return new Response(JSON.stringify({ success: false, message: "Forbidden" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const body = (await req.json()) as CreateUserBody;
     if (!body.full_name || !body.username) {
-      return new Response(JSON.stringify({ success: false, message: "Missing required fields" }), { status: 400 });
+      return new Response(JSON.stringify({ success: false, message: "Missing required fields" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const role = body.role || "user";
@@ -71,7 +81,7 @@ Deno.serve(async (req) => {
       user_metadata: { full_name: body.full_name }
     });
     if (createErr || !created?.user) {
-      return new Response(JSON.stringify({ success: false, message: createErr?.message || "Failed to create auth user" }), { status: 400 });
+      return new Response(JSON.stringify({ success: false, message: createErr?.message || "Failed to create auth user" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const authUser = created.user;
@@ -95,7 +105,7 @@ Deno.serve(async (req) => {
 
     if (upsertErr) {
       await admin.auth.admin.deleteUser(authUser.id);
-      return new Response(JSON.stringify({ success: false, message: upsertErr.message || "Failed to save profile" }), { status: 400 });
+      return new Response(JSON.stringify({ success: false, message: upsertErr.message || "Failed to save profile" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({
@@ -107,8 +117,8 @@ Deno.serve(async (req) => {
       username: body.username,
       role,
       temp_password: password
-    }), { headers: { "Content-Type": "application/json" } });
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
-    return new Response(JSON.stringify({ success: false, message: String(e?.message || e) }), { status: 500 });
+    return new Response(JSON.stringify({ success: false, message: String(e?.message || e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
