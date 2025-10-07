@@ -245,48 +245,11 @@ const ReceiptsPage: React.FC = () => {
                       </Link>
                     </td>
                   </tr>
-                ) : (
-                  receipts.map((receipt) => (
-                    <tr key={receipt.id} className="hover:bg-muted/50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <Link
-                          to={`/receipts/${receipt.id}`}
-                          className="text-sm font-medium text-primary hover:text-primary/80"
-                        >
-                          {receipt.grn_number}
-                        </Link>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="text-sm text-foreground">{receipt.supplier_name}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {getStatusBadge(receipt.status)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-foreground">
-                          {receipt.received_by_user?.full_name || 'Unknown'}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-muted-foreground">
-                          {formatDate(receipt.created_at || receipt.receipt_date)}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <Link
-                          to={`/receipts/${receipt.id}`}
-                          className="text-primary hover:text-primary/80 font-medium"
-                        >
-                          View
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )
