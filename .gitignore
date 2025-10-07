@@ -1,0 +1,240 @@
+# ==============================================================================
+# Quartermaster Inventory - Custom .gitignore
+# ==============================================================================
+
+# ==============================================================================
+# Node.js Dependencies
+# ==============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-store/
+.yarn/
+.npm/
+
+# ==============================================================================
+# Build Outputs (Vite)
+# ==============================================================================
+dist/
+dist-ssr/
+build/
+*.local
+
+# ==============================================================================
+# Environment Variables & Secrets
+# ==============================================================================
+# Keep .env.example for documentation, ignore actual env files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.*.local
+
+# Supabase secrets
+.supabase/
+
+# ==============================================================================
+# Testing & Coverage
+# ==============================================================================
+coverage/
+.nyc_output/
+*.lcov
+.vitest/
+
+# ==============================================================================
+# TypeScript
+# ==============================================================================
+*.tsbuildinfo
+*.tsbuildinfo.*
+tsconfig.tsbuildinfo
+
+# ==============================================================================
+# Logs
+# ==============================================================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==============================================================================
+# IDE & Editor Files
+# ==============================================================================
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains IDEs (WebStorm, IntelliJ, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+.idea_modules/
+out/
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+*.swp
+*.swo
+*.swn
+*~
+.netrwhist
+
+# Emacs
+\#*\#
+.\#*
+*~
+.*.bak
+
+# ==============================================================================
+# Operating System Files
+# ==============================================================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# ==============================================================================
+# Temporary Files
+# ==============================================================================
+*.tmp
+*.temp
+*.cache
+.cache/
+.temp/
+tmp/
+temp/
+
+# ==============================================================================
+# Database & Supabase
+# ==============================================================================
+# Local Supabase instance data
+.supabase/
+supabase/.branches/
+supabase/.temp/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Generated database types (uncomment if you want to regenerate these)
+# src/types/database.types.ts
+
+# ==============================================================================
+# Package Manager Lock Files (Optional - Choose One)
+# ==============================================================================
+# Uncomment based on your package manager preference:
+# If using npm, keep package-lock.json
+# If using yarn, keep yarn.lock
+# If using pnpm, keep pnpm-lock.yaml
+# yarn.lock
+# pnpm-lock.yaml
+
+# ==============================================================================
+# Build & Bundle Analysis
+# ==============================================================================
+.vite/
+.rollup.cache/
+stats.html
+bundle-analyzer-report.html
+
+# ==============================================================================
+# Debugging
+# ==============================================================================
+.vscode/launch.json
+chrome-profiler-events*.json
+*.cpuprofile
+
+# ==============================================================================
+# Misc
+# ==============================================================================
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Archive files (unless needed)
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Generated documentation
+docs/api/
+docs/.vitepress/dist
+docs/.vitepress/cache
+
+# Local notes and TODO files
+NOTES.md
+TODO.md
+.scratch/
+scratch/
+
+# Generated exports/reports (from your inventory app)
+exports/
+reports/
+generated-reports/
+*.pdf
+*.xlsx
+*.xls
+*.csv
+# Uncomment above if you don't want to track generated reports
+
+# ==============================================================================
+# Project Specific
+# ==============================================================================
+# Any local development scripts or test data
+scripts/local-test-data/
+scripts/temp/
+
+# User uploads (if applicable)
+uploads/
+public/uploads/

@@ -34,14 +34,11 @@ const UsersPage: React.FC = () => {
   })
   const [createLoading, setCreateLoading] = useState(false)
 
-  // Load users from database
+  // Load users from database using our custom function
   const loadUsers = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .order('created_at', { ascending: false })
+      const { data, error } = await (supabase as any).rpc('admin_get_all_users')
       
       if (error) throw error
       setUsers(data || [])
@@ -84,46 +81,70 @@ const UsersPage: React.FC = () => {
     )
   }
 
-  // Create new user
+  // Create new user using our custom function
   const handleCreateUser = async () => {
-    if (!createForm.email || !createForm.full_name || !createForm.username) {
-      toast.error('Please fill in all required fields')
+    // Validate required fields
+    const missingFields = []
+    if (!createForm.full_name?.trim()) missingFields.push('Full Name')
+    if (!createForm.username?.trim()) missingFields.push('Username')
+    if (!createForm.role) missingFields.push('Role')
+    if (!createForm.department?.trim()) missingFields.push('Department')
+    if (!createForm.rank?.trim()) missingFields.push('Rank')
+    if (!createForm.service_number?.trim()) missingFields.push('Service Number')
+
+    if (missingFields.length > 0) {
+      toast.error(
+        <div>
+          <p><strong>Missing required fields:</strong></p>
+          <ul className="list-disc list-inside mt-1">
+            {missingFields.map(field => <li key={field}>{field}</li>)}
+          </ul>
+        </div>,
+        { duration: 6000 }
+      )
+      return
+    }
+
+    // Validate username format (no spaces, special characters)
+    if (createForm.username && !/^[a-zA-Z0-9_]+$/.test(createForm.username)) {
+      toast.error('Username can only contain letters, numbers, and underscores')
+      return
+    }
+
+    // Validate service number format (numbers only)
+    if (createForm.service_number && !/^[0-9]+$/.test(createForm.service_number)) {
+      toast.error('Service Number must contain only numbers')
       return
     }
 
     setCreateLoading(true)
     try {
-      // Create user in Supabase Auth first
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: createForm.email,
-        password: 'TempPassword123!', // Temporary password - user will need to reset
-        email_confirm: true,
-        user_metadata: {
-          full_name: createForm.full_name
-        }
+      // Use our custom admin_create_user function
+      const { data, error } = await (supabase as any).rpc('admin_create_user', {
+        p_full_name: createForm.full_name,
+        p_username: createForm.username,
+        p_role: createForm.role,
+        p_department: createForm.department || null,
+        p_rank: createForm.rank || null,
+        p_service_number: createForm.service_number || null,
+        p_email: createForm.email || null
       })
 
-      if (authError) throw authError
+      if (error) throw error
+      
+      const result = data[0] as any // RPC returns array
+      if (!result.success) {
+        throw new Error(result.message)
+      }
 
-      // Create user profile in public.users table
-      const { error: profileError } = await supabase
-        .from('users')
-        .insert({
-          id: authData.user.id,
-          email: createForm.email,
-          username: createForm.username,
-          full_name: createForm.full_name,
-          role: createForm.role,
-          rank: createForm.rank || null,
-          service_number: createForm.service_number || null,
-          department: createForm.department || null,
-          password_hash: 'supabase_auth', // Placeholder since we use Supabase auth
-          is_active: true
-        })
-
-      if (profileError) throw profileError
-
-      toast.success(`User ${createForm.full_name} created successfully`)
+      toast.success(
+        <div>
+          <p>User {createForm.full_name} created successfully!</p>
+          <p className="text-sm mt-1">Temporary password: <strong>{result.temp_password}</strong></p>
+        </div>,
+        { duration: 8000 }
+      )
+      
       setShowCreateModal(false)
       setCreateForm({
         email: '',
@@ -143,8 +164,88 @@ const UsersPage: React.FC = () => {
     }
   }
 
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [editForm, setEditForm] = useState<Partial<CreateUserForm>>({})
+  const [editLoading, setEditLoading] = useState(false)
+
   const handleEdit = (user: User) => {
-    toast('Edit functionality coming soon', { icon: 'ℹ️' })
+    setEditingUser(user)
+    setEditForm({
+      full_name: user.full_name,
+      username: user.username,
+      role: user.role as UserRoleName,
+      department: user.department || '',
+      rank: user.rank || '',
+      service_number: user.service_number || ''
+    })
+  }
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return
+
+    // Validate required fields for editing
+    const missingFields = []
+    if (!editForm.full_name?.trim()) missingFields.push('Full Name')
+    if (!editForm.username?.trim()) missingFields.push('Username')
+    if (!editForm.role) missingFields.push('Role')
+    if (!editForm.department?.trim()) missingFields.push('Department')
+    if (!editForm.rank?.trim()) missingFields.push('Rank')
+    if (!editForm.service_number?.trim()) missingFields.push('Service Number')
+
+    if (missingFields.length > 0) {
+      toast.error(
+        <div>
+          <p><strong>Missing required fields:</strong></p>
+          <ul className="list-disc list-inside mt-1">
+            {missingFields.map(field => <li key={field}>{field}</li>)}
+          </ul>
+        </div>,
+        { duration: 6000 }
+      )
+      return
+    }
+
+    // Validate username format
+    if (editForm.username && !/^[a-zA-Z0-9_]+$/.test(editForm.username)) {
+      toast.error('Username can only contain letters, numbers, and underscores')
+      return
+    }
+
+    // Validate service number format
+    if (editForm.service_number && !/^[0-9]+$/.test(editForm.service_number)) {
+      toast.error('Service Number must contain only numbers')
+      return
+    }
+
+    setEditLoading(true)
+    try {
+      const { data, error } = await (supabase as any).rpc('update_system_user', {
+        p_user_id: editingUser.id,
+        p_full_name: editForm.full_name,
+        p_username: editForm.username,
+        p_role: editForm.role,
+        p_department: editForm.department || null,
+        p_rank: editForm.rank || null,
+        p_service_number: editForm.service_number || null
+      })
+
+      if (error) throw error
+      
+      const result = data[0] as any
+      if (!result.success) {
+        throw new Error(result.message)
+      }
+
+      toast.success(`User ${editForm.full_name} updated successfully`)
+      setEditingUser(null)
+      setEditForm({})
+      loadUsers()
+    } catch (error: any) {
+      console.error('Error updating user:', error)
+      toast.error(error.message || 'Failed to update user')
+    } finally {
+      setEditLoading(false)
+    }
   }
 
   const handleDelete = async (user: User) => {
@@ -158,19 +259,15 @@ const UsersPage: React.FC = () => {
     }
 
     try {
-      // Delete from public.users table first
-      const { error: profileError } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id)
+      const { data, error } = await (supabase as any).rpc('admin_delete_user', {
+        p_user_id: user.id
+      })
 
-      if (profileError) throw profileError
-
-      // Delete from Supabase Auth
-      const { error: authError } = await supabase.auth.admin.deleteUser(user.id)
-      if (authError) {
-        console.warn('Auth user deletion failed:', authError)
-        // Don't throw - profile is already deleted
+      if (error) throw error
+      
+      const result = data[0] as any
+      if (!result.success) {
+        throw new Error(result.message)
       }
 
       toast.success(`User ${user.full_name} deleted successfully`)
@@ -182,25 +279,32 @@ const UsersPage: React.FC = () => {
   }
 
   const handleResetPassword = async (user: User) => {
-    if (!user.email) {
-      toast.error('User has no email address')
-      return
-    }
-
-    if (!confirm(`Send password reset email to ${user.email}?`)) {
+    if (!confirm(`Reset password for ${user.full_name}?`)) {
       return
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(user.email, {
-        redirectTo: `${window.location.origin}/auth/reset-password`
+      const { data, error } = await (supabase as any).rpc('admin_reset_user_password', {
+        p_user_id: user.id
       })
 
       if (error) throw error
-      toast.success(`Password reset email sent to ${user.email}`)
+      
+      const result = data[0] as any
+      if (!result.success) {
+        throw new Error(result.message)
+      }
+
+      toast.success(
+        <div>
+          <p>Password reset for {user.full_name}</p>
+          <p className="text-sm mt-1">New password: <strong>{result.temp_password}</strong></p>
+        </div>,
+        { duration: 8000 }
+      )
     } catch (error: any) {
-      console.error('Error sending password reset:', error)
-      toast.error(error.message || 'Failed to send password reset email')
+      console.error('Error resetting password:', error)
+      toast.error(error.message || 'Failed to reset password')
     }
   }
 
@@ -216,12 +320,17 @@ const UsersPage: React.FC = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ is_active: !user.is_active })
-        .eq('id', user.id)
+      const { data, error } = await (supabase as any).rpc('update_system_user', {
+        p_user_id: user.id,
+        p_is_active: !user.is_active
+      })
 
       if (error) throw error
+      
+      const result = data[0] as any
+      if (!result.success) {
+        throw new Error(result.message)
+      }
       
       toast.success(`User ${user.full_name} ${action}d successfully`)
       loadUsers() // Reload users list
@@ -425,18 +534,20 @@ const UsersPage: React.FC = () => {
             </div>
 
             <form onSubmit={(e) => { e.preventDefault(); handleCreateUser(); }} className="space-y-4">
-              {/* Email */}
+              {/* Email (Optional - will be auto-generated) */}
               <div>
-                <label className="label">Email Address *</label>
+                <label className="label">Email Address (Optional)</label>
                 <input
                   type="email"
                   value={createForm.email}
                   onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
                   className="input w-full"
-                  placeholder="user@example.com"
-                  required
+                  placeholder="user@example.com (leave blank for auto-generation)"
                   disabled={createLoading}
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  If left blank, email will be auto-generated as username@quartermaster.mil
+                </p>
               </div>
 
               {/* Full Name */}
@@ -486,39 +597,42 @@ const UsersPage: React.FC = () => {
 
               {/* Department */}
               <div>
-                <label className="label">Department</label>
+                <label className="label">Department *</label>
                 <input
                   type="text"
                   value={createForm.department}
                   onChange={(e) => setCreateForm({ ...createForm, department: e.target.value })}
                   className="input w-full"
                   placeholder="IT Department"
+                  required
                   disabled={createLoading}
                 />
               </div>
 
               {/* Rank */}
               <div>
-                <label className="label">Rank</label>
+                <label className="label">Rank *</label>
                 <input
                   type="text"
                   value={createForm.rank}
                   onChange={(e) => setCreateForm({ ...createForm, rank: e.target.value })}
                   className="input w-full"
                   placeholder="Captain"
+                  required
                   disabled={createLoading}
                 />
               </div>
 
               {/* Service Number */}
               <div>
-                <label className="label">Service Number</label>
+                <label className="label">Service Number *</label>
                 <input
                   type="text"
                   value={createForm.service_number}
                   onChange={(e) => setCreateForm({ ...createForm, service_number: e.target.value })}
                   className="input w-full"
                   placeholder="12345"
+                  required
                   disabled={createLoading}
                 />
               </div>
@@ -529,7 +643,7 @@ const UsersPage: React.FC = () => {
                   <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-blue-800">
                     <p className="font-medium mb-1">Password Information</p>
-                    <p>A temporary password will be assigned. The user will receive an email to set their own password.</p>
+                    <p>A temporary password will be generated and displayed after user creation.</p>
                   </div>
                 </div>
               </div>
@@ -558,6 +672,142 @@ const UsersPage: React.FC = () => {
                     <>
                       <Save className="w-4 h-4" />
                       Create User
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-lg font-semibold text-foreground">Edit User</h3>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="text-muted-foreground hover:text-foreground"
+                disabled={editLoading}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdateUser(); }} className="space-y-4">
+              {/* Full Name */}
+              <div>
+                <label className="label">Full Name *</label>
+                <input
+                  type="text"
+                  value={editForm.full_name || ''}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  className="input w-full"
+                  placeholder="John Doe"
+                  required
+                  disabled={editLoading}
+                />
+              </div>
+
+              {/* Username */}
+              <div>
+                <label className="label">Username *</label>
+                <input
+                  type="text"
+                  value={editForm.username || ''}
+                  onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
+                  className="input w-full"
+                  placeholder="johndoe"
+                  required
+                  disabled={editLoading}
+                />
+              </div>
+
+              {/* Role */}
+              <div>
+                <label className="label">Role *</label>
+                <select
+                  value={editForm.role || 'semi_user'}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRoleName })}
+                  className="input w-full"
+                  required
+                  disabled={editLoading}
+                >
+                  <option value="semi_user">Semi User (Requester)</option>
+                  <option value="user">User (Watchman/Store Keeper)</option>
+                  <option value="admin">Admin (Approver)</option>
+                  <option value="super_admin">Super Admin</option>
+                </select>
+              </div>
+
+              {/* Department */}
+              <div>
+                <label className="label">Department *</label>
+                <input
+                  type="text"
+                  value={editForm.department || ''}
+                  onChange={(e) => setEditForm({ ...editForm, department: e.target.value })}
+                  className="input w-full"
+                  placeholder="IT Department"
+                  required
+                  disabled={editLoading}
+                />
+              </div>
+
+              {/* Rank */}
+              <div>
+                <label className="label">Rank *</label>
+                <input
+                  type="text"
+                  value={editForm.rank || ''}
+                  onChange={(e) => setEditForm({ ...editForm, rank: e.target.value })}
+                  className="input w-full"
+                  placeholder="Captain"
+                  required
+                  disabled={editLoading}
+                />
+              </div>
+
+              {/* Service Number */}
+              <div>
+                <label className="label">Service Number *</label>
+                <input
+                  type="text"
+                  value={editForm.service_number || ''}
+                  onChange={(e) => setEditForm({ ...editForm, service_number: e.target.value })}
+                  className="input w-full"
+                  placeholder="12345"
+                  required
+                  disabled={editLoading}
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="btn btn-secondary flex-1"
+                  disabled={editLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary flex-1 flex items-center justify-center gap-2"
+                  disabled={editLoading}
+                >
+                  {editLoading ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Updating...
+                    </>
+                  ) : (
+                    <>
+                      <Save className="w-4 h-4" />
+                      Update User
                     </>
                   )}
                 </button>
