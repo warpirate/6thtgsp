@@ -27,12 +27,12 @@ build/
 # Environment Variables & Secrets
 # ==============================================================================
 # Keep .env.example for documentation, ignore actual env files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-.env.*.local
+# .env
+# .env.local
+# .env.development.local
+# .env.test.local
+# .env.production.local
+# .env.*.local
 
 # Supabase secrets
 .supabase/

@@ -37,42 +37,43 @@ stateDiagram-v2
 | **Submitted** | Awaiting verification | No one (locked) | Verified, Rejected, Draft | Verify, Reject, Recall |
 | **Verified** | Passed verification, awaiting approval | No one (locked) | Approved, Rejected, Submitted | Approve, Reject, Recall |
 | **Approved** | Final approval granted | No one (archived) | None | View only, Export |
-| **Rejected** | Rejected at any stage | Creator (if revised) | Draft, Abandoned | Revise, View reason |
 
 ---
 
 ## 👥 Role-Based Actions
 
-### Semi User (Basic)
+### Semi User (Requester)
 ```
 ┌─────────────────────────────┐
 │ Can Do:                     │
-│ - Create drafts             │
+│ - Create requisitions       │
 │ - Edit own drafts           │
-│ - Submit for verification   │
-│ - Revise rejected receipts  │
-│ - View own receipts         │
+│ - Submit for approval       │
+│ - View own requisitions     │
+│ - Return issued items       │
+│ - Receive approved items    │
 └─────────────────────────────┘
 ```
 
-### User (Verifier)
+### User (Watchman/Storekeeper)
 ```
 ┌─────────────────────────────┐
-│ Can Do: (All Semi User +)   │
+│ Can Do: (Watchman duties)   │
 │ - Verify submitted receipts │
-│ - Reject submissions        │
-│ - Add verification comments │
-│ - View all receipts         │
+│ - Issue approved items only │
+│ - Accept returns            │
+│ - View approved requisitions│
 └─────────────────────────────┘
 ```
 
 ### Admin (Approver)
 ```
 ┌─────────────────────────────┐
-│ Can Do: (All User +)        │
+│ Can Do: (Approval authority)│
+│ - Approve requisitions      │
+│ - Reject requisitions       │
 │ - Approve verified receipts │
-│ - Final reject authority    │
-│ - View approval metrics     │
+│ - View all requisitions     │
 │ - Export approved receipts  │
 └─────────────────────────────┘
 ```

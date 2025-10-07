@@ -5,17 +5,59 @@ import { Database } from '@/types/database.types'
 const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL
 const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY
 
+// Only log in development mode
+if ((import.meta as any).env?.DEV) {
+  console.log('🔧 Supabase Configuration Check:')
+  console.log('URL:', supabaseUrl ? 'Set' : 'Missing')
+  console.log('Key:', supabaseAnonKey ? `Set (${supabaseAnonKey.length} chars)` : 'Missing')
+  console.log('Environment:', (import.meta as any).env?.MODE)
+}
+
 if (!supabaseUrl || !supabaseAnonKey) {
+  console.error('❌ Missing Supabase environment variables')
+  console.log('Available env vars:', Object.keys((import.meta as any).env || {}))
   throw new Error('Missing Supabase environment variables')
 }
 
-// Create Supabase client
+// Create Supabase client with proper session storage
+if ((import.meta as any).env?.DEV) {
+  console.log('🚀 Creating Supabase client...')
+}
+
 export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
     flowType: 'pkce',
+    storage: {
+      getItem: (key: string) => {
+        if (typeof window === 'undefined') return null
+        try {
+          return window.localStorage.getItem(key)
+        } catch {
+          return null
+        }
+      },
+      setItem: (key: string, value: string) => {
+        if (typeof window === 'undefined') return
+        try {
+          window.localStorage.setItem(key, value)
+        } catch {
+          // Ignore storage errors
+        }
+      },
+      removeItem: (key: string) => {
+        if (typeof window === 'undefined') return
+        try {
+          window.localStorage.removeItem(key)
+        } catch {
+          // Ignore storage errors
+        }
+      },
+    },
+    storageKey: 'sb-ehjudngdvilwvrukcxle-auth-token',
+    debug: false,
   },
   db: {
     schema: 'public',
@@ -27,10 +69,87 @@ export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey, {
   },
 })
 
+if ((import.meta as any).env?.DEV) {
+  console.log('✅ Supabase client created successfully')
+}
+
+// Global error handler for auth errors
+supabase.auth.onAuthStateChange((event, session) => {
+  if (event === 'TOKEN_REFRESHED') {
+    console.log('Token refreshed successfully')
+  } else if (event === 'SIGNED_OUT') {
+    console.log('User signed out')
+  } else if (event === 'USER_UPDATED') {
+    console.log('User updated')
+  }
+})
+
 // Storage bucket names
 export const STORAGE_BUCKETS = {
   RECEIPT_DOCUMENTS: 'receipt-documents',
 } as const
+
+// Helper to ensure authenticated requests
+export const ensureAuthenticated = async () => {
+  try {
+    // First check if we have a session in storage
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    if (sessionError) {
+      console.error('Session error:', sessionError)
+      throw new Error('Authentication error: ' + sessionError.message)
+    }
+    
+    if (!session) {
+      console.error('No active session found')
+      throw new Error('No active session. Please log in again.')
+    }
+    
+    // Validate the session is still valid with the server
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    
+    if (userError || !user) {
+      console.error('Session validation failed:', userError)
+      // Clear invalid session
+      await supabase.auth.signOut()
+      throw new Error('Session expired. Please log in again.')
+    }
+    
+    return session
+  } catch (error) {
+    console.error('ensureAuthenticated failed:', error)
+    throw error
+  }
+}
+
+// Helper to recover from authentication errors
+export const recoverFromAuthError = async (error: any): Promise<boolean> => {
+  try {
+    // First try to get current session
+    const { data: { session } } = await supabase.auth.getSession()
+    
+    if (!session) {
+      // No session to recover, sign out cleanly
+      await supabase.auth.signOut()
+      return false
+    }
+    
+    // Session exists, try to refresh it
+    const { error: refreshError } = await supabase.auth.refreshSession()
+    
+    if (refreshError) {
+      // Refresh failed, sign out
+      await supabase.auth.signOut()
+      return false
+    }
+    
+    return true
+  } catch (recoveryError) {
+    // Any error during recovery, sign out
+    await supabase.auth.signOut()
+    return false
+  }
+}
 
 // Helper functions for common operations
 export const supabaseHelpers = {
@@ -189,6 +308,61 @@ export const supabaseHelpers = {
       return false
     }
   },
+
+  // Test database connectivity and permissions
+  testConnection: async () => {
+    try {
+      console.log('Testing database connection...')
+      
+      // Test basic connection
+      const { data, error } = await supabase
+        .from('users')
+        .select('count', { count: 'exact', head: true })
+      
+      if (error) {
+        console.error('Database connection test failed:', error)
+        return { success: false, error: error.message }
+      }
+      
+      console.log('Database connection successful')
+      return { success: true, count: data }
+    } catch (error: any) {
+      console.error('Database connection test error:', error)
+      return { success: false, error: error.message }
+    }
+  },
+
+  // Create user profile if missing
+  createUserProfile: async (authUser: any) => {
+    try {
+      console.log('Creating user profile for:', authUser.email)
+      
+      const { data, error } = await supabase
+        .from('users')
+        .insert({
+          id: authUser.id,
+          email: authUser.email,
+          full_name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          username: authUser.email?.split('@')[0] || 'user',
+          password_hash: 'supabase_auth', // Placeholder since we use Supabase auth
+          role: 'semi_user',
+          is_active: true
+        })
+        .select()
+        .single()
+      
+      if (error) {
+        console.error('Failed to create user profile:', error)
+        return { success: false, error: error.message }
+      }
+      
+      console.log('User profile created successfully')
+      return { success: true, profile: data }
+    } catch (error: any) {
+      console.error('Error creating user profile:', error)
+      return { success: false, error: error.message }
+    }
+  },
 }
 
 // Error handling wrapper
@@ -264,6 +438,47 @@ export const queryBuilder = {
     }
     return query.order('created_at', { ascending: false })
   },
+
+  // Workflow helpers for corrected flow
+  workflow: {
+    // Check if user can approve requisitions (admin only)
+    canApproveRequisition: async (requisitionId: string, userId: string): Promise<boolean> => {
+      const { data, error } = await (supabase as any).rpc('can_approve_requisition', {
+        requisition_uuid: requisitionId,
+        user_uuid: userId
+      })
+      return data === true
+    },
+
+    // Check if user can issue items (watchman after admin approval)
+    canIssueItems: async (requisitionId: string, userId: string): Promise<boolean> => {
+      const { data, error } = await (supabase as any).rpc('can_issue_items', {
+        requisition_uuid: requisitionId,
+        user_uuid: userId
+      })
+      return data === true
+    },
+
+    // Validate status transition
+    validateTransition: async (currentStatus: string, newStatus: string, userRole: string): Promise<boolean> => {
+      const { data, error } = await (supabase as any).rpc('validate_requisition_transition', {
+        current_status: currentStatus,
+        new_status: newStatus,
+        user_role: userRole
+      })
+      return data === true
+    },
+
+    // Get pending approvals (for admins)
+    getPendingApprovals: async () => {
+      return await (supabase as any).from('v_pending_approvals').select('*')
+    },
+
+    // Get items ready for issue (for watchmen)
+    getReadyForIssue: async () => {
+      return await (supabase as any).from('v_ready_for_issue').select('*')
+    }
+  }
 }
 
 export default supabase

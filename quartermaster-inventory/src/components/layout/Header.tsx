@@ -19,9 +19,15 @@ interface HeaderProps {
 
 const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const location = useLocation()
-  const { userProfile, signOut, hasPermission } = useAuth()
+  const { userProfile, signOut, hasPermission, user } = useAuth()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('Header - userProfile:', userProfile)
+    console.log('Header - auth user:', user?.email)
+  }, [userProfile, user])
 
   // Generate breadcrumbs from current path
   const generateBreadcrumbs = () => {
