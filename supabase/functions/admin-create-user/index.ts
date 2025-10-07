@@ -70,8 +70,10 @@ Deno.serve(async (req) => {
 
     const role = body.role || "user";
     const email = body.email && body.email.trim() !== "" ? body.email.trim().toLowerCase() : `${body.username.toLowerCase()}@quartermaster.mil`;
-    const password = body.password && body.password.trim() !== "" ? body.password : genTempPassword();
-    const requireChange = body.requirePasswordChange !== false;
+    const password = (body.password || "").trim();
+    if (!password) {
+      return new Response(JSON.stringify({ success: false, message: "Password is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Pre-validate duplicates in public.users (username/email/service_number)
     {
@@ -106,7 +108,7 @@ Deno.serve(async (req) => {
 
     const authUser = created.user;
 
-    // Upsert profile
+    // Upsert profile (no password flags; simple model)
     const { error: upsertErr } = await admin.from("users").upsert({
       id: authUser.id,
       email,
@@ -117,27 +119,23 @@ Deno.serve(async (req) => {
       rank: body.rank ?? null,
       service_number: body.service_number ?? null,
       is_active: true,
-      password_change_required: requireChange,
-      last_password_change: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       created_at: new Date().toISOString()
     }, { onConflict: "id" });
 
     if (upsertErr) {
-      await admin.auth.admin.deleteUser(authUser.id);
       return new Response(JSON.stringify({ success: false, message: upsertErr.message || "Failed to save profile" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({
       success: true,
-      message: body.password ? "User created with custom password" : "User created with temporary password",
+      message: "User created",
       user_id: authUser.id,
       email,
       full_name: body.full_name,
       username: body.username,
       role,
-      temp_password: password
-    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ success: false, message: String(e?.message || e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
