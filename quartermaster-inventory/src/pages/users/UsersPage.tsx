@@ -136,6 +136,10 @@ const UsersPage: React.FC = () => {
 
     setCreateLoading(true)
     try {
+      // Ensure we send JWT explicitly to the Edge Function
+      const { data: sess } = await supabase.auth.getSession()
+      const authHeader = sess?.session?.access_token ? { Authorization: `Bearer ${sess.session.access_token}` } : {}
+
       // Call Edge Function to create Auth user + profile atomically
       const { data, error } = await supabase.functions.invoke('admin-create-user', {
         body: {
@@ -149,6 +153,7 @@ const UsersPage: React.FC = () => {
           password: createForm.password || null,
           requirePasswordChange: createForm.requirePasswordChange,
         },
+        headers: authHeader,
       })
 
       if (error) throw error
@@ -190,7 +195,17 @@ const UsersPage: React.FC = () => {
       loadUsers() // Reload users list
     } catch (error: any) {
       console.error('Error creating user:', error)
-      toast.error(error.message || 'Failed to create user')
+      const msg: string = (error?.message || '').toString()
+      // Improve common diagnostics
+      if (/Missing Supabase env/i.test(msg)) {
+        toast.error('Edge Function missing secrets (SERVICE_ROLE/ANON/URL). Please set Supabase function secrets.')
+      } else if (/Unauthorized/i.test(msg)) {
+        toast.error('Unauthorized. Please log in again.')
+      } else if (/Forbidden/i.test(msg)) {
+        toast.error('Forbidden. Only Super Admin can perform this action.')
+      } else {
+        toast.error(msg || 'Failed to create user')
+      }
     } finally {
       setCreateLoading(false)
     }
@@ -316,9 +331,14 @@ const UsersPage: React.FC = () => {
     }
 
     try {
+      // Ensure we send JWT explicitly to the Edge Function
+      const { data: sess } = await supabase.auth.getSession()
+      const authHeader = sess?.session?.access_token ? { Authorization: `Bearer ${sess.session.access_token}` } : {}
+
       // Call Edge Function to reset Supabase Auth password
       const { data, error } = await supabase.functions.invoke('admin-reset-password', {
         body: { user_id: user.id },
+        headers: authHeader,
       })
 
       if (error) throw error
@@ -339,7 +359,16 @@ const UsersPage: React.FC = () => {
       )
     } catch (error: any) {
       console.error('Error resetting password:', error)
-      toast.error(error.message || 'Failed to reset password')
+      const msg: string = (error?.message || '').toString()
+      if (/Missing Supabase env/i.test(msg)) {
+        toast.error('Edge Function missing secrets (SERVICE_ROLE/ANON/URL). Please set Supabase function secrets.')
+      } else if (/Unauthorized/i.test(msg)) {
+        toast.error('Unauthorized. Please log in again.')
+      } else if (/Forbidden/i.test(msg)) {
+        toast.error('Forbidden. Only Super Admin can perform this action.')
+      } else {
+        toast.error(msg || 'Failed to reset password')
+      }
     }
   }
 

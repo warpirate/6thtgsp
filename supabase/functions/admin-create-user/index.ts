@@ -23,9 +23,15 @@ function genTempPassword(prefix = "QM"): string {
 
 Deno.serve(async (req) => {
   try {
-    const url = Deno.env.get("SUPABASE_URL");
-    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
+    const url =
+      Deno.env.get("PROJECT_URL") ??
+      Deno.env.get("SUPABASE_URL");
+    const serviceKey =
+      Deno.env.get("SERVICE_ROLE_KEY") ??
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    const anonKey =
+      Deno.env.get("ANON_KEY") ??
+      Deno.env.get("SUPABASE_ANON_KEY");
     if (!url || !serviceKey || !anonKey) {
       return new Response(JSON.stringify({ success: false, message: "Missing Supabase env" }), { status: 500 });
     }
