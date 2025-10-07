@@ -136,30 +136,32 @@ const UsersPage: React.FC = () => {
 
     setCreateLoading(true)
     try {
-      // Use our enhanced admin_create_user_with_password function
-      const { data, error } = await (supabase as any).rpc('admin_create_user_with_password', {
-        p_full_name: createForm.full_name,
-        p_username: createForm.username,
-        p_password: createForm.password || null,
-        p_role: createForm.role,
-        p_department: createForm.department || null,
-        p_rank: createForm.rank || null,
-        p_service_number: createForm.service_number || null,
-        p_email: createForm.email || null,
-        p_require_change: createForm.requirePasswordChange
+      // Call Edge Function to create Auth user + profile atomically
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: {
+          email: createForm.email || undefined,
+          full_name: createForm.full_name,
+          username: createForm.username,
+          role: createForm.role,
+          department: createForm.department || null,
+          rank: createForm.rank || null,
+          service_number: createForm.service_number || null,
+          password: createForm.password || null,
+          requirePasswordChange: createForm.requirePasswordChange,
+        },
       })
 
       if (error) throw error
-      
-      const result = data[0] as any // RPC returns array
-      if (!result.success) {
-        throw new Error(result.message)
+
+      const result = data as any
+      if (!result?.success) {
+        throw new Error(result?.message || 'Failed to create user')
       }
 
       toast.success(
         <div>
           <p>User {createForm.full_name} created successfully!</p>
-          {!createForm.password && (
+          {!createForm.password && result?.temp_password && (
             <p className="text-sm mt-1">Temporary password: <strong>{result.temp_password}</strong></p>
           )}
           {createForm.password && (
@@ -314,21 +316,24 @@ const UsersPage: React.FC = () => {
     }
 
     try {
-      const { data, error } = await (supabase as any).rpc('admin_reset_user_password', {
-        p_user_id: user.id
+      // Call Edge Function to reset Supabase Auth password
+      const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+        body: { user_id: user.id },
       })
 
       if (error) throw error
-      
-      const result = data[0] as any
-      if (!result.success) {
-        throw new Error(result.message)
+
+      const result = data as any
+      if (!result?.success) {
+        throw new Error(result?.message || 'Failed to reset password')
       }
 
       toast.success(
         <div>
           <p>Password reset for {user.full_name}</p>
-          <p className="text-sm mt-1">New password: <strong>{result.temp_password}</strong></p>
+          {result?.temp_password && (
+            <p className="text-sm mt-1">New password: <strong>{result.temp_password}</strong></p>
+          )}
         </div>,
         { duration: 8000 }
       )

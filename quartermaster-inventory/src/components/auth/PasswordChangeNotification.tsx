@@ -54,26 +54,27 @@ const PasswordChangeNotification: React.FC<PasswordChangeNotificationProps> = ({
 
     setLoading(true)
     try {
-      const { data, error } = await (supabase as any).rpc('change_user_password', {
-        p_user_id: userProfile?.id,
-        p_old_password: passwords.current,
-        p_new_password: passwords.new
-      })
+      // 1) Update password in Supabase Auth (current session must be valid)
+      const { error: updErr } = await supabase.auth.updateUser({ password: passwords.new })
+      if (updErr) throw updErr
 
-      if (error) throw error
+      // 2) Update local profile flag so UI stops prompting
+      if (userProfile?.id) {
+        const { error: profErr } = await (supabase as any)
+          .from('users')
+          .update({ password_change_required: false, last_password_change: new Date().toISOString() })
+          .eq('id', userProfile.id)
 
-      const result = data[0] as any
-      if (!result.success) {
-        throw new Error(result.message)
+        if (profErr) {
+          // Not critical for auth, but surface warning
+          console.warn('Profile flag update failed:', profErr)
+        }
       }
 
       toast.success('Password changed successfully!')
       setPasswords({ current: '', new: '', confirm: '' })
       setShowForm(false)
-      
-      // Refresh user profile to update password change requirement
       await refreshProfile()
-      
       if (onClose) onClose()
     } catch (error: any) {
       console.error('Error changing password:', error)
