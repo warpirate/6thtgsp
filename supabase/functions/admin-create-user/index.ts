@@ -73,6 +73,24 @@ Deno.serve(async (req) => {
     const password = body.password && body.password.trim() !== "" ? body.password : genTempPassword();
     const requireChange = body.requirePasswordChange !== false;
 
+    // Pre-validate duplicates in public.users (username/email/service_number)
+    {
+      const [{ data: u1 }, { data: u2 }, { data: u3 }] = await Promise.all([
+        admin.from("users").select("id").eq("username", body.username).limit(1),
+        admin.from("users").select("id").eq("email", email).limit(1),
+        body.service_number ? admin.from("users").select("id").eq("service_number", body.service_number).limit(1) : Promise.resolve({ data: null }),
+      ]);
+      if (u1 && (u1 as any[]).length > 0) {
+        return new Response(JSON.stringify({ success: false, message: "Username already in use" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (u2 && (u2 as any[]).length > 0) {
+        return new Response(JSON.stringify({ success: false, message: "Email already in use" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+      if (u3 && (u3 as any[]).length > 0) {
+        return new Response(JSON.stringify({ success: false, message: "Service number already in use" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
+    }
+
     // Create auth user
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
       email,
@@ -81,7 +99,9 @@ Deno.serve(async (req) => {
       user_metadata: { full_name: body.full_name }
     });
     if (createErr || !created?.user) {
-      return new Response(JSON.stringify({ success: false, message: createErr?.message || "Failed to create auth user" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const msg = createErr?.message || "Failed to create auth user";
+      const status = /already registered|already exists|duplicate/i.test(msg) ? 409 : 400;
+      return new Response(JSON.stringify({ success: false, message: msg }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const authUser = created.user;

@@ -195,16 +195,34 @@ const UsersPage: React.FC = () => {
       loadUsers() // Reload users list
     } catch (error: any) {
       console.error('Error creating user:', error)
-      const msg: string = (error?.message || '').toString()
-      // Improve common diagnostics
+      const status = error?.status
+      let serverMsg = ''
+      const ctx = error?.context
+      try {
+        if (ctx) {
+          if (typeof ctx === 'string') {
+            const parsed = JSON.parse(ctx)
+            serverMsg = parsed?.message || parsed?.error || ctx
+          } else if (typeof ctx === 'object') {
+            const body = (ctx as any).body ?? (ctx as any).error ?? (ctx as any).message
+            if (typeof body === 'string') {
+              try { const p = JSON.parse(body); serverMsg = p?.message || body } catch { serverMsg = body }
+            } else if (typeof body === 'object') {
+              serverMsg = (body as any)?.message || JSON.stringify(body)
+            }
+          }
+        }
+      } catch {}
+
+      const msg: string = (serverMsg || error?.message || '').toString()
       if (/Missing Supabase env/i.test(msg)) {
         toast.error('Edge Function missing secrets (SERVICE_ROLE/ANON/URL). Please set Supabase function secrets.')
-      } else if (/Unauthorized/i.test(msg)) {
+      } else if (/Unauthorized/i.test(msg) || status === 401) {
         toast.error('Unauthorized. Please log in again.')
-      } else if (/Forbidden/i.test(msg)) {
+      } else if (/Forbidden/i.test(msg) || status === 403) {
         toast.error('Forbidden. Only Super Admin can perform this action.')
       } else {
-        toast.error(msg || 'Failed to create user')
+        toast.error(msg || `Failed to create user${status ? ` (HTTP ${status})` : ''}`)
       }
     } finally {
       setCreateLoading(false)
@@ -359,15 +377,34 @@ const UsersPage: React.FC = () => {
       )
     } catch (error: any) {
       console.error('Error resetting password:', error)
-      const msg: string = (error?.message || '').toString()
+      const status = error?.status
+      let serverMsg = ''
+      const ctx = error?.context
+      try {
+        if (ctx) {
+          if (typeof ctx === 'string') {
+            const parsed = JSON.parse(ctx)
+            serverMsg = parsed?.message || parsed?.error || ctx
+          } else if (typeof ctx === 'object') {
+            const body = (ctx as any).body ?? (ctx as any).error ?? (ctx as any).message
+            if (typeof body === 'string') {
+              try { const p = JSON.parse(body); serverMsg = p?.message || body } catch { serverMsg = body }
+            } else if (typeof body === 'object') {
+              serverMsg = (body as any)?.message || JSON.stringify(body)
+            }
+          }
+        }
+      } catch {}
+
+      const msg: string = (serverMsg || error?.message || '').toString()
       if (/Missing Supabase env/i.test(msg)) {
         toast.error('Edge Function missing secrets (SERVICE_ROLE/ANON/URL). Please set Supabase function secrets.')
-      } else if (/Unauthorized/i.test(msg)) {
+      } else if (/Unauthorized/i.test(msg) || status === 401) {
         toast.error('Unauthorized. Please log in again.')
-      } else if (/Forbidden/i.test(msg)) {
+      } else if (/Forbidden/i.test(msg) || status === 403) {
         toast.error('Forbidden. Only Super Admin can perform this action.')
       } else {
-        toast.error(msg || 'Failed to reset password')
+        toast.error(msg || `Failed to reset password${status ? ` (HTTP ${status})` : ''}`)
       }
     }
   }
