@@ -6,13 +6,16 @@ import { User, UserRoleName } from '@/types'
 import { toast } from 'react-hot-toast'
 
 interface CreateUserForm {
-  email: string
+  email?: string
   full_name: string
   username: string
   role: UserRoleName
   rank?: string
   service_number?: string
   department?: string
+  password?: string
+  confirmPassword?: string
+  requirePasswordChange?: boolean
 }
 
 const UsersPage: React.FC = () => {
@@ -30,7 +33,10 @@ const UsersPage: React.FC = () => {
     role: 'semi_user',
     rank: '',
     service_number: '',
-    department: ''
+    department: '',
+    password: '',
+    confirmPassword: '',
+    requirePasswordChange: true
   })
   const [createLoading, setCreateLoading] = useState(false)
 
@@ -117,17 +123,30 @@ const UsersPage: React.FC = () => {
       return
     }
 
+    // Validate password if provided
+    if (createForm.password && createForm.password !== createForm.confirmPassword) {
+      toast.error('Password and confirmation password do not match')
+      return
+    }
+
+    if (createForm.password && createForm.password.length < 6) {
+      toast.error('Password must be at least 6 characters long')
+      return
+    }
+
     setCreateLoading(true)
     try {
-      // Use our custom admin_create_user function
-      const { data, error } = await (supabase as any).rpc('admin_create_user', {
+      // Use our enhanced admin_create_user_with_password function
+      const { data, error } = await (supabase as any).rpc('admin_create_user_with_password', {
         p_full_name: createForm.full_name,
         p_username: createForm.username,
+        p_password: createForm.password || null,
         p_role: createForm.role,
         p_department: createForm.department || null,
         p_rank: createForm.rank || null,
         p_service_number: createForm.service_number || null,
-        p_email: createForm.email || null
+        p_email: createForm.email || null,
+        p_require_change: createForm.requirePasswordChange
       })
 
       if (error) throw error
@@ -140,9 +159,17 @@ const UsersPage: React.FC = () => {
       toast.success(
         <div>
           <p>User {createForm.full_name} created successfully!</p>
-          <p className="text-sm mt-1">Temporary password: <strong>{result.temp_password}</strong></p>
+          {!createForm.password && (
+            <p className="text-sm mt-1">Temporary password: <strong>{result.temp_password}</strong></p>
+          )}
+          {createForm.password && (
+            <p className="text-sm mt-1">User can login with the password you provided</p>
+          )}
+          {createForm.requirePasswordChange && (
+            <p className="text-sm mt-1 text-amber-600">⚠️ User will be required to change password on first login</p>
+          )}
         </div>,
-        { duration: 8000 }
+        { duration: 10000 }
       )
       
       setShowCreateModal(false)
@@ -153,7 +180,10 @@ const UsersPage: React.FC = () => {
         role: 'semi_user',
         rank: '',
         service_number: '',
-        department: ''
+        department: '',
+        password: '',
+        confirmPassword: '',
+        requirePasswordChange: true
       })
       loadUsers() // Reload users list
     } catch (error: any) {
@@ -637,13 +667,68 @@ const UsersPage: React.FC = () => {
                 />
               </div>
 
+              {/* Password Options */}
+              <div className="border-t pt-4">
+                <h4 className="text-sm font-medium text-foreground mb-3">Password Options</h4>
+                
+                {/* Custom Password */}
+                <div>
+                  <label className="label">Custom Password (Optional)</label>
+                  <input
+                    type="password"
+                    value={createForm.password || ''}
+                    onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
+                    className="input w-full"
+                    placeholder="Leave blank for auto-generated password"
+                    disabled={createLoading}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    If empty, a temporary password will be generated
+                  </p>
+                </div>
+
+                {/* Confirm Password */}
+                {createForm.password && (
+                  <div className="mt-3">
+                    <label className="label">Confirm Password</label>
+                    <input
+                      type="password"
+                      value={createForm.confirmPassword || ''}
+                      onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
+                      className="input w-full"
+                      placeholder="Confirm password"
+                      disabled={createLoading}
+                    />
+                  </div>
+                )}
+
+                {/* Password Change Requirement */}
+                <div className="mt-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={createForm.requirePasswordChange}
+                      onChange={(e) => setCreateForm({ ...createForm, requirePasswordChange: e.target.checked })}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      disabled={createLoading}
+                    />
+                    <span className="text-sm text-foreground">
+                      Require user to change password on first login
+                    </span>
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Recommended for security. User will be prompted to set a new password.
+                  </p>
+                </div>
+              </div>
+
               {/* Info */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mt-4">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-blue-800">
                     <p className="font-medium mb-1">Password Information</p>
-                    <p>A temporary password will be generated and displayed after user creation.</p>
+                    <p>If no custom password is provided, a secure temporary password will be generated and displayed after user creation.</p>
                   </div>
                 </div>
               </div>

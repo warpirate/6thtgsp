@@ -3,6 +3,7 @@ import { User as SupabaseUser, Session } from '@supabase/supabase-js'
 import { supabase, supabaseHelpers } from '@/lib/supabase'
 import { User, UserRoleName } from '@/types'
 import { toast } from 'react-hot-toast'
+import PasswordChangeNotification from '@/components/auth/PasswordChangeNotification'
 
 interface AuthContextType {
   // Authentication state
@@ -16,6 +17,9 @@ interface AuthContextType {
   loading: boolean
   initializing: boolean
   authReady: boolean
+  
+  // Password change requirements
+  requiresPasswordChange: boolean
   
   // Authentication methods
   signIn: (email: string, password: string) => Promise<void>
@@ -57,6 +61,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [loading, setLoading] = useState(false)
   const [initializing, setInitializing] = useState(true)
   const [authReady, setAuthReady] = useState(false)
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false)
+
+  // Check password-change requirement for a given user
+  const refreshPasswordRequirement = async (userId: string) => {
+    try {
+      const { data, error } = await (supabase as any).rpc('check_password_change_required', {
+        p_user_id: userId,
+      })
+      if (error) {
+        console.warn('check_password_change_required error:', error)
+        setRequiresPasswordChange(false)
+        return
+      }
+      setRequiresPasswordChange(Boolean(data))
+    } catch (e) {
+      console.warn('Failed to refresh password requirement:', e)
+      setRequiresPasswordChange(false)
+    }
+  }
 
   // Load user profile and role information
   const loadUserProfile = async (userId: string): Promise<boolean> => {
@@ -122,7 +145,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           setRole('semi_user')
           setRoleName('semi_user')
         }
-        
+
+        // Update password change requirement flag
+        await refreshPasswordRequirement(userId)
+
         return true
       }
       
@@ -174,6 +200,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             setUserProfile(null)
             setRole(null)
             setRoleName(null)
+            setRequiresPasswordChange(false)
             return
           }
           
@@ -262,7 +289,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setLoading(false)
     }
   }
-
   // Sign out
   const signOut = async () => {
     setLoading(true)
@@ -273,6 +299,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setSession(null)
       setRole(null)
       setRoleName(null)
+      setRequiresPasswordChange(false)
       
       // Then sign out from Supabase
       const { error } = await supabase.auth.signOut()
@@ -416,6 +443,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const refreshProfile = async () => {
     if (!user) return
     await loadUserProfile(user.id)
+    await refreshPasswordRequirement(user.id)
   }
 
   // Check if user has specific permission
@@ -510,11 +538,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (requiredPermission) {
       return hasPermission(requiredPermission)
     }
-    
     return true
   }
 
-  const contextValue: AuthContextType = {
+  const    contextValue: AuthContextType = {
     // State
     user,
     userProfile,
@@ -524,6 +551,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     loading,
     initializing,
     authReady,
+    requiresPasswordChange,
     
     // Methods
     signIn,
@@ -541,6 +569,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   return (
     <AuthContext.Provider value={contextValue}>
       {children}
+      {userProfile && requiresPasswordChange && userProfile.role !== 'super_admin' ? (
+        <PasswordChangeNotification isVisible={true} canDismiss={true} />
+      ) : null}
     </AuthContext.Provider>
   )
 }
