@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { UserPlus, Search, Edit, Trash2, Shield, X, Save, AlertCircle } from 'lucide-react'
+import { UserPlus, Search, Edit, Trash2, Key, Shield, X, Save, AlertCircle } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { User, UserRoleName } from '@/types'
@@ -15,6 +15,7 @@ interface CreateUserForm {
   department?: string
   password?: string
   confirmPassword?: string
+  requirePasswordChange?: boolean
 }
 
 const UsersPage: React.FC = () => {
@@ -34,7 +35,8 @@ const UsersPage: React.FC = () => {
     service_number: '',
     department: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    requirePasswordChange: true
   })
   const [createLoading, setCreateLoading] = useState(false)
 
@@ -121,12 +123,6 @@ const UsersPage: React.FC = () => {
       return
     }
 
-    // Require password for new account
-    if (!createForm.password || !createForm.password.trim()) {
-      toast.error('Password is required')
-      return
-    }
-
     // Validate password if provided
     if (createForm.password && createForm.password !== createForm.confirmPassword) {
       toast.error('Password and confirmation password do not match')
@@ -154,7 +150,8 @@ const UsersPage: React.FC = () => {
           department: createForm.department || null,
           rank: createForm.rank || null,
           service_number: createForm.service_number || null,
-          password: createForm.password,
+          password: createForm.password || null,
+          requirePasswordChange: createForm.requirePasswordChange,
         },
         headers: authHeader,
       })
@@ -169,7 +166,15 @@ const UsersPage: React.FC = () => {
       toast.success(
         <div>
           <p>User {createForm.full_name} created successfully!</p>
-          <p className="text-sm mt-1">User can login with the password you provided</p>
+          {!createForm.password && result?.temp_password && (
+            <p className="text-sm mt-1">Temporary password: <strong>{result.temp_password}</strong></p>
+          )}
+          {createForm.password && (
+            <p className="text-sm mt-1">User can login with the password you provided</p>
+          )}
+          {createForm.requirePasswordChange && (
+            <p className="text-sm mt-1 text-amber-600">⚠️ User will be required to change password on first login</p>
+          )}
         </div>,
         { duration: 10000 }
       )
@@ -184,39 +189,22 @@ const UsersPage: React.FC = () => {
         service_number: '',
         department: '',
         password: '',
-        confirmPassword: ''
+        confirmPassword: '',
+        requirePasswordChange: true
       })
       loadUsers() // Reload users list
     } catch (error: any) {
       console.error('Error creating user:', error)
-      const status = error?.status
-      let serverMsg = ''
-      const ctx = error?.context
-      try {
-        if (ctx) {
-          if (typeof ctx === 'string') {
-            const parsed = JSON.parse(ctx)
-            serverMsg = parsed?.message || parsed?.error || ctx
-          } else if (typeof ctx === 'object') {
-            const body = (ctx as any).body ?? (ctx as any).error ?? (ctx as any).message
-            if (typeof body === 'string') {
-              try { const p = JSON.parse(body); serverMsg = p?.message || body } catch { serverMsg = body }
-            } else if (typeof body === 'object') {
-              serverMsg = (body as any)?.message || JSON.stringify(body)
-            }
-          }
-        }
-      } catch {}
-
-      const msg: string = (serverMsg || error?.message || '').toString()
+      const msg: string = (error?.message || '').toString()
+      // Improve common diagnostics
       if (/Missing Supabase env/i.test(msg)) {
         toast.error('Edge Function missing secrets (SERVICE_ROLE/ANON/URL). Please set Supabase function secrets.')
-      } else if (/Unauthorized/i.test(msg) || status === 401) {
+      } else if (/Unauthorized/i.test(msg)) {
         toast.error('Unauthorized. Please log in again.')
-      } else if (/Forbidden/i.test(msg) || status === 403) {
+      } else if (/Forbidden/i.test(msg)) {
         toast.error('Forbidden. Only Super Admin can perform this action.')
       } else {
-        toast.error(msg || `Failed to create user${status ? ` (HTTP ${status})` : ''}`)
+        toast.error(msg || 'Failed to create user')
       }
     } finally {
       setCreateLoading(false)
@@ -337,7 +325,52 @@ const UsersPage: React.FC = () => {
     }
   }
 
-  // Removed: reset password flow (no Edge Function)
+  const handleResetPassword = async (user: User) => {
+    if (!confirm(`Reset password for ${user.full_name}?`)) {
+      return
+    }
+
+    try {
+      // Ensure we send JWT explicitly to the Edge Function
+      const { data: sess } = await supabase.auth.getSession()
+      const authHeader = sess?.session?.access_token ? { Authorization: `Bearer ${sess.session.access_token}` } : {}
+
+      // Call Edge Function to reset Supabase Auth password
+      const { data, error } = await supabase.functions.invoke('admin-reset-password', {
+        body: { user_id: user.id },
+        headers: authHeader,
+      })
+
+      if (error) throw error
+
+      const result = data as any
+      if (!result?.success) {
+        throw new Error(result?.message || 'Failed to reset password')
+      }
+
+      toast.success(
+        <div>
+          <p>Password reset for {user.full_name}</p>
+          {result?.temp_password && (
+            <p className="text-sm mt-1">New password: <strong>{result.temp_password}</strong></p>
+          )}
+        </div>,
+        { duration: 8000 }
+      )
+    } catch (error: any) {
+      console.error('Error resetting password:', error)
+      const msg: string = (error?.message || '').toString()
+      if (/Missing Supabase env/i.test(msg)) {
+        toast.error('Edge Function missing secrets (SERVICE_ROLE/ANON/URL). Please set Supabase function secrets.')
+      } else if (/Unauthorized/i.test(msg)) {
+        toast.error('Unauthorized. Please log in again.')
+      } else if (/Forbidden/i.test(msg)) {
+        toast.error('Forbidden. Only Super Admin can perform this action.')
+      } else {
+        toast.error(msg || 'Failed to reset password')
+      }
+    }
+  }
 
   const handleToggleStatus = async (user: User) => {
     if (user.id === userProfile?.id) {
@@ -516,7 +549,13 @@ const UsersPage: React.FC = () => {
                       >
                         <Edit className="w-4 h-4" />
                       </button>
-                      {/* Reset Password button removed */}
+                      <button
+                        onClick={() => handleResetPassword(user)}
+                        className="text-yellow-600 hover:text-yellow-700"
+                        title="Reset Password"
+                      >
+                        <Key className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleToggleStatus(user)}
                         className={user.is_active ? 'text-orange-600 hover:text-orange-700' : 'text-green-600 hover:text-green-700'}
@@ -662,34 +701,58 @@ const UsersPage: React.FC = () => {
                 />
               </div>
 
-              {/* Password */}
+              {/* Password Options */}
               <div className="border-t pt-4">
-                <h4 className="text-sm font-medium text-foreground mb-3">Password</h4>
-
+                <h4 className="text-sm font-medium text-foreground mb-3">Password Options</h4>
+                
+                {/* Custom Password */}
                 <div>
-                  <label className="label">Password *</label>
+                  <label className="label">Custom Password (Optional)</label>
                   <input
                     type="password"
                     value={createForm.password || ''}
                     onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
                     className="input w-full"
-                    placeholder="Enter password"
-                    required
+                    placeholder="Leave blank for auto-generated password"
                     disabled={createLoading}
                   />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    If empty, a temporary password will be generated
+                  </p>
                 </div>
 
+                {/* Confirm Password */}
+                {createForm.password && (
+                  <div className="mt-3">
+                    <label className="label">Confirm Password</label>
+                    <input
+                      type="password"
+                      value={createForm.confirmPassword || ''}
+                      onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
+                      className="input w-full"
+                      placeholder="Confirm password"
+                      disabled={createLoading}
+                    />
+                  </div>
+                )}
+
+                {/* Password Change Requirement */}
                 <div className="mt-3">
-                  <label className="label">Confirm Password *</label>
-                  <input
-                    type="password"
-                    value={createForm.confirmPassword || ''}
-                    onChange={(e) => setCreateForm({ ...createForm, confirmPassword: e.target.value })}
-                    className="input w-full"
-                    placeholder="Re-enter password"
-                    required
-                    disabled={createLoading}
-                  />
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={createForm.requirePasswordChange}
+                      onChange={(e) => setCreateForm({ ...createForm, requirePasswordChange: e.target.checked })}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      disabled={createLoading}
+                    />
+                    <span className="text-sm text-foreground">
+                      Require user to change password on first login
+                    </span>
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Recommended for security. User will be prompted to set a new password.
+                  </p>
                 </div>
               </div>
 
@@ -699,7 +762,7 @@ const UsersPage: React.FC = () => {
                   <AlertCircle className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div className="text-sm text-blue-800">
                     <p className="font-medium mb-1">Password Information</p>
-                    <p>The user can change their password later from account settings or via password reset.</p>
+                    <p>If no custom password is provided, a secure temporary password will be generated and displayed after user creation.</p>
                   </div>
                 </div>
               </div>

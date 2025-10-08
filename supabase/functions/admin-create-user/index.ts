@@ -70,28 +70,8 @@ Deno.serve(async (req) => {
 
     const role = body.role || "user";
     const email = body.email && body.email.trim() !== "" ? body.email.trim().toLowerCase() : `${body.username.toLowerCase()}@quartermaster.mil`;
-    const password = (body.password || "").trim();
-    if (!password) {
-      return new Response(JSON.stringify({ success: false, message: "Password is required" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    // Pre-validate duplicates in public.users (username/email/service_number)
-    {
-      const [{ data: u1 }, { data: u2 }, { data: u3 }] = await Promise.all([
-        admin.from("users").select("id").eq("username", body.username).limit(1),
-        admin.from("users").select("id").eq("email", email).limit(1),
-        body.service_number ? admin.from("users").select("id").eq("service_number", body.service_number).limit(1) : Promise.resolve({ data: null }),
-      ]);
-      if (u1 && (u1 as any[]).length > 0) {
-        return new Response(JSON.stringify({ success: false, message: "Username already in use" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      if (u2 && (u2 as any[]).length > 0) {
-        return new Response(JSON.stringify({ success: false, message: "Email already in use" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-      if (u3 && (u3 as any[]).length > 0) {
-        return new Response(JSON.stringify({ success: false, message: "Service number already in use" }), { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-      }
-    }
+    const password = body.password && body.password.trim() !== "" ? body.password : genTempPassword();
+    const requireChange = body.requirePasswordChange !== false;
 
     // Create auth user
     const { data: created, error: createErr } = await admin.auth.admin.createUser({
@@ -101,14 +81,12 @@ Deno.serve(async (req) => {
       user_metadata: { full_name: body.full_name }
     });
     if (createErr || !created?.user) {
-      const msg = createErr?.message || "Failed to create auth user";
-      const status = /already registered|already exists|duplicate/i.test(msg) ? 409 : 400;
-      return new Response(JSON.stringify({ success: false, message: msg }), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ success: false, message: createErr?.message || "Failed to create auth user" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const authUser = created.user;
 
-    // Upsert profile (no password flags; simple model)
+    // Upsert profile
     const { error: upsertErr } = await admin.from("users").upsert({
       id: authUser.id,
       email,
@@ -119,23 +97,27 @@ Deno.serve(async (req) => {
       rank: body.rank ?? null,
       service_number: body.service_number ?? null,
       is_active: true,
+      password_change_required: requireChange,
+      last_password_change: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       created_at: new Date().toISOString()
     }, { onConflict: "id" });
 
     if (upsertErr) {
+      await admin.auth.admin.deleteUser(authUser.id);
       return new Response(JSON.stringify({ success: false, message: upsertErr.message || "Failed to save profile" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     return new Response(JSON.stringify({
       success: true,
-      message: "User created",
+      message: body.password ? "User created with custom password" : "User created with temporary password",
       user_id: authUser.id,
       email,
       full_name: body.full_name,
       username: body.username,
       role,
-    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      temp_password: password
+    }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     return new Response(JSON.stringify({ success: false, message: String(e?.message || e) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
