@@ -42,78 +42,130 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
   const location = useLocation()
   const { userProfile, roleName, hasPermission, canAccess } = useAuth()
 
-  const navigation: NavItem[] = [
-    {
-      name: 'Dashboard',
-      href: '/dashboard',
-      icon: LayoutDashboard,
-    },
-    {
-      name: 'Item Catalog',
-      href: '/catalog',
-      icon: ShoppingBag,
-    },
-    {
-      name: 'My Requisitions',
-      href: '/requisitions',
-      icon: ListChecks,
-    },
-    {
-      name: 'Stock Receipts',
-      href: '/receipts',
-      icon: Receipt,
-    },
-    {
-      name: 'Issue Items',
-      href: '/issuance',
-      icon: Send,
-      requiredPermission: 'issue_items',
-    },
-    {
-      name: 'Returns',
-      href: '/returns',
-      icon: RotateCcw,
-    },
-    {
-      name: 'Approvals',
-      href: '/approvals',
-      icon: CheckCircle,
-      requiredRoles: [UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN],
-    },
-    {
-      name: 'Inventory & Reports',
-      href: '/inventory',
-      icon: BarChart3,
-      requiredPermission: 'view_reports',
-    },
-    {
-      name: 'Documents',
-      href: '/documents',
-      icon: Folder,
-    },
-    {
-      name: 'Audit Logs',
-      href: '/audit',
-      icon: FileText,
-      requiredRoles: [UserRole.ADMIN, UserRole.SUPER_ADMIN],
-    },
-    {
-      name: 'User Management',
-      href: '/users',
-      icon: Users,
-      requiredRoles: [UserRole.SUPER_ADMIN],
-      requiredPermission: 'manage_users',
-    },
-    {
-      name: 'Settings',
-      href: '/settings',
-      icon: Settings,
-    },
-  ]
+  // Define navigation based on user role
+  const getNavigationForRole = (role: string | null): NavItem[] => {
+    const baseItems = [
+      {
+        name: 'Dashboard',
+        href: '/dashboard',
+        icon: LayoutDashboard,
+      },
+    ]
 
-  const filteredNavigation = navigation.filter(item => 
-    canAccess(item.requiredRoles, item.requiredPermission)
-  )
+    if (role === 'semi_user') {
+      return [
+        ...baseItems,
+        {
+          name: 'Item Catalog',
+          href: '/catalog',
+          icon: ShoppingBag,
+        },
+        {
+          name: 'My Requisitions',
+          href: '/requisitions',
+          icon: ListChecks,
+        },
+        {
+          name: 'My Returns',
+          href: '/returns',
+          icon: RotateCcw,
+        },
+        {
+          name: 'Settings',
+          href: '/settings',
+          icon: Settings,
+        },
+      ]
+    }
+
+    if (role === 'user') {
+      return [
+        ...baseItems,
+        {
+          name: 'Issue Items',
+          href: '/issuance',
+          icon: Send,
+        },
+        {
+          name: 'Approvals',
+          href: '/approvals',
+          icon: CheckCircle,
+        },
+        {
+          name: 'Stock Receipts',
+          href: '/receipts',
+          icon: Receipt,
+        },
+        {
+          name: 'Returns',
+          href: '/returns',
+          icon: RotateCcw,
+        },
+        {
+          name: 'Settings',
+          href: '/settings',
+          icon: Settings,
+        },
+      ]
+    }
+
+    if (role === 'admin') {
+      return [
+        ...baseItems,
+        {
+          name: 'Approvals',
+          href: '/approvals',
+          icon: CheckCircle,
+        },
+        {
+          name: 'Inventory & Reports',
+          href: '/inventory',
+          icon: BarChart3,
+        },
+        {
+          name: 'Audit Logs',
+          href: '/audit',
+          icon: FileText,
+        },
+        {
+          name: 'Settings',
+          href: '/settings',
+          icon: Settings,
+        },
+      ]
+    }
+
+    if (role === 'super_admin') {
+      return [
+        ...baseItems,
+        {
+          name: 'User Management',
+          href: '/users',
+          icon: Users,
+        },
+        {
+          name: 'Inventory & Reports',
+          href: '/inventory',
+          icon: BarChart3,
+        },
+        {
+          name: 'Audit Logs',
+          href: '/audit',
+          icon: FileText,
+        },
+        {
+          name: 'Settings',
+          href: '/settings',
+          icon: Settings,
+        },
+      ]
+    }
+
+    // Default fallback
+    return baseItems
+  }
+
+  const navigation = getNavigationForRole(roleName)
 
   const isActive = (href: string) => {
     if (href === '/dashboard') {
@@ -183,7 +235,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
 
         {/* Navigation */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
-          {filteredNavigation.map((item) => {
+          {navigation.map((item) => {
             const active = isActive(item.href)
             const Icon = item.icon
 
