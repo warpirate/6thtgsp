@@ -1,54 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Search, Download, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react'
-
-// Mock audit logs data
-const mockLogs = [
-  {
-    id: '1',
-    action: 'created',
-    entity_type: 'receipt',
-    entity_id: 'REC-2024-001',
-    user_name: 'John Smith',
-    created_at: '2024-10-04T14:30:00Z',
-    metadata: { item_name: 'Laptop Dell XPS 15', quantity: 5 },
-  },
-  {
-    id: '2',
-    action: 'verified',
-    entity_type: 'receipt',
-    entity_id: 'REC-2024-001',
-    user_name: 'Jane Doe',
-    created_at: '2024-10-04T15:00:00Z',
-    metadata: { comments: 'All documents verified' },
-  },
-  {
-    id: '3',
-    action: 'approved',
-    entity_type: 'receipt',
-    entity_id: 'REC-2024-001',
-    user_name: 'Admin User',
-    created_at: '2024-10-04T15:30:00Z',
-    metadata: { comments: 'Approved for processing' },
-  },
-  {
-    id: '4',
-    action: 'updated',
-    entity_type: 'user',
-    entity_id: 'user-002',
-    user_name: 'Admin User',
-    created_at: '2024-10-04T10:15:00Z',
-    metadata: { field: 'role', old_value: 'user', new_value: 'semi_user' },
-  },
-  {
-    id: '5',
-    action: 'deleted',
-    entity_type: 'document',
-    entity_id: 'doc-003',
-    user_name: 'John Smith',
-    created_at: '2024-10-03T16:45:00Z',
-    metadata: { file_name: 'old_receipt.pdf' },
-  },
-]
+import { supabase } from '@/lib/supabase'
+import { AuditLog } from '@/types'
+import { toast } from 'react-hot-toast'
 
 const AuditLogsPage: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('')
@@ -56,12 +10,50 @@ const AuditLogsPage: React.FC = () => {
   const [entityFilter, setEntityFilter] = useState('')
   const [expandedLog, setExpandedLog] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
+  const [logs, setLogs] = useState<AuditLog[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const filteredLogs = mockLogs.filter((log) => {
-    const matchesSearch = log.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.entity_id.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    loadAuditLogs()
+  }, [])
+
+  const loadAuditLogs = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await (supabase as any)
+        .from('audit_logs')
+        .select(`
+          *,
+          user:users(full_name, email)
+        `)
+        .order('created_at', { ascending: false })
+        .limit(100)
+
+      if (error) {
+        console.error('Error loading audit logs:', error)
+        // Don't show error toast if table doesn't exist yet
+        if (error.code !== 'PGRST116' && error.code !== '42P01') {
+          toast.error('Failed to load audit logs')
+        }
+        setLogs([])
+        return
+      }
+
+      setLogs((data || []) as AuditLog[])
+    } catch (error) {
+      console.error('Unexpected error:', error)
+      setLogs([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredLogs = logs.filter((log) => {
+    const matchesSearch = (log.user_id?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (log.table_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      (log.record_id?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
     const matchesAction = !actionFilter || log.action === actionFilter
-    const matchesEntity = !entityFilter || log.entity_type === entityFilter
+    const matchesEntity = !entityFilter || log.table_name === entityFilter
     return matchesSearch && matchesAction && matchesEntity
   })
 
@@ -171,7 +163,7 @@ const AuditLogsPage: React.FC = () => {
 
       {/* Results Count */}
       <div className="text-sm text-muted-foreground">
-        Showing {filteredLogs.length} of {mockLogs.length} logs
+        Showing {filteredLogs.length} of {logs.length} logs
       </div>
 
       {/* Logs Table */}
@@ -201,53 +193,82 @@ const AuditLogsPage: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-card divide-y divide-border">
-              {filteredLogs.map((log) => (
-                <React.Fragment key={log.id}>
-                  <tr className="hover:bg-muted/50 transition-colors">
-                    <td className="px-6 py-4">
-                      <button
-                        onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        {expandedLog === log.id ? (
-                          <ChevronUp className="w-4 h-4" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4" />
-                        )}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
-                      {formatDate(log.created_at)}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-medium">
-                      {log.user_name}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getActionColor(log.action)}`}>
-                        {log.action.charAt(0).toUpperCase() + log.action.slice(1)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm capitalize">
-                      {log.entity_type}
-                    </td>
-                    <td className="px-6 py-4 text-sm font-mono">
-                      {log.entity_id}
-                    </td>
-                  </tr>
-                  {expandedLog === log.id && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-4 bg-muted/20">
-                        <div className="text-sm">
-                          <h4 className="font-semibold mb-2">Details:</h4>
-                          <pre className="bg-card p-3 rounded border border-border overflow-x-auto">
-                            {JSON.stringify(log.metadata, null, 2)}
-                          </pre>
-                        </div>
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                    Loading audit logs...
+                  </td>
+                </tr>
+              ) : filteredLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-8 text-center text-muted-foreground">
+                    <div className="flex flex-col items-center gap-2">
+                      <Search className="w-12 h-12 opacity-50" />
+                      <p>No audit logs found</p>
+                      <p className="text-xs">System activities will appear here</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredLogs.map((log) => (
+                  <React.Fragment key={log.id}>
+                    <tr className="hover:bg-muted/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => setExpandedLog(expandedLog === log.id ? null : log.id)}
+                          className="text-muted-foreground hover:text-foreground"
+                        >
+                          {expandedLog === log.id ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
+                        {formatDate(log.timestamp || new Date().toISOString())}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-medium">
+                        {log.user_id || 'System'}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getActionColor(log.action)}`}>
+                          {log.action.charAt(0).toUpperCase() + log.action.slice(1)}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-sm capitalize">
+                        {log.table_name}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-mono">
+                        {log.record_id || 'N/A'}
                       </td>
                     </tr>
-                  )}
-                </React.Fragment>
-              ))}
+                    {expandedLog === log.id && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 bg-muted/20">
+                          <div className="text-sm">
+                            <h4 className="font-semibold mb-2">Details:</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p><strong>Old Value:</strong></p>
+                                <pre className="bg-card p-3 rounded border border-border overflow-x-auto text-xs">
+                                  {JSON.stringify(log.old_value, null, 2)}
+                                </pre>
+                              </div>
+                              <div>
+                                <p><strong>New Value:</strong></p>
+                                <pre className="bg-card p-3 rounded border border-border overflow-x-auto text-xs">
+                                  {JSON.stringify(log.new_value, null, 2)}
+                                </pre>
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))
+              )}
             </tbody>
           </table>
         </div>

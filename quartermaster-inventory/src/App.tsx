@@ -200,16 +200,40 @@ const App: React.FC = () => {
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<DashboardPage />} />
 
-                      {/* Stock Receipts */}
-                      <Route path="/receipts" element={<ReceiptsPage />} />
+                      {/* Catalog - Semi Users and Admins only */}
+                      <Route path="/catalog" element={
+                        <ProtectedRoute requiredPermission="view_catalog">
+                          <CatalogPage />
+                        </ProtectedRoute>
+                      } />
+
+                      {/* Requisitions */}
+                      <Route path="/requisitions" element={<RequisitionsPage />} />
+                      <Route path="/requisitions/create" element={
+                        <ProtectedRoute requiredPermission="create_requisition">
+                          <CreateRequisitionPage />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/requisitions/:id" element={<RequisitionDetailPage />} />
+
+                      {/* Stock Receipts - Users, Admins, Super Admins */}
+                      <Route path="/receipts" element={
+                        <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN]}>
+                          <ReceiptsPage />
+                        </ProtectedRoute>
+                      } />
                       <Route path="/receipts/create" element={
-                        <ProtectedRoute requiredPermission="create_receipt">
+                        <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN]}>
                           <CreateReceiptPage />
                         </ProtectedRoute>
                       } />
-                      <Route path="/receipts/:id" element={<ReceiptDetailPage />} />
+                      <Route path="/receipts/:id" element={
+                        <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN]}>
+                          <ReceiptDetailPage />
+                        </ProtectedRoute>
+                      } />
 
-                      {/* Approvals */}
+                      {/* Approvals - Users (Watchmen), Admins, Super Admins */}
                       <Route path="/approvals" element={
                         <ProtectedRoute 
                           requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN]}
@@ -218,14 +242,27 @@ const App: React.FC = () => {
                         </ProtectedRoute>
                       } />
 
-                      {/* Inventory & Reports */}
+                      {/* Issuance - Users (Watchmen), Admins, Super Admins */}
+                      <Route path="/issuance" element={
+                        <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN]}>
+                          <IssuancePage />
+                        </ProtectedRoute>
+                      } />
+
+                      {/* Returns - All roles can access */}
+                      <Route path="/returns" element={<ReturnsPage />} />
+
+                      {/* Inventory & Reports - Admins and Super Admins only */}
                       <Route path="/inventory" element={
-                        <ProtectedRoute requiredPermission="view_reports">
+                        <ProtectedRoute requiredRoles={[UserRole.ADMIN, UserRole.SUPER_ADMIN]}>
                           <InventoryPage />
                         </ProtectedRoute>
                       } />
 
-                      {/* Audit Logs */}
+                      {/* Documents - All authenticated users */}
+                      <Route path="/documents" element={<DocumentsPage />} />
+
+                      {/* Audit Logs - Admins and Super Admins only */}
                       <Route path="/audit" element={
                         <ProtectedRoute 
                           requiredRoles={[UserRole.ADMIN, UserRole.SUPER_ADMIN]}
@@ -234,26 +271,7 @@ const App: React.FC = () => {
                         </ProtectedRoute>
                       } />
 
-                      {/* Documents */}
-                      <Route path="/documents" element={<DocumentsPage />} />
-
-                      {/* Catalog & Requisitions */}
-                      <Route path="/catalog" element={<CatalogPage />} />
-                      <Route path="/requisitions" element={<RequisitionsPage />} />
-                      <Route path="/requisitions/create" element={<CreateRequisitionPage />} />
-                      <Route path="/requisitions/:id" element={<RequisitionDetailPage />} />
-
-                      {/* Issuance (Store Keeper) */}
-                      <Route path="/issuance" element={
-                        <ProtectedRoute requiredPermission="issue_items">
-                          <IssuancePage />
-                        </ProtectedRoute>
-                      } />
-
-                      {/* Returns */}
-                      <Route path="/returns" element={<ReturnsPage />} />
-
-                      {/* User Management (Super Admin Only) */}
+                      {/* User Management - Super Admin Only */}
                       <Route path="/users" element={
                         <ProtectedRoute 
                           requiredRoles={[UserRole.SUPER_ADMIN]}

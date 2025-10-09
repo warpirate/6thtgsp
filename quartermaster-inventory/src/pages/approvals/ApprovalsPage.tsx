@@ -23,7 +23,7 @@ const ApprovalsPage: React.FC = () => {
   const loadPendingRequisitions = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('requisitions')
         .select(`
           *,
@@ -41,14 +41,19 @@ const ApprovalsPage: React.FC = () => {
 
       if (error) {
         console.error('Error loading requisitions:', error)
-        toast.error('Failed to load pending requisitions')
+        // Don't show error toast if it's just empty data
+        if (error.code !== 'PGRST116') {
+          toast.error('Failed to load pending requisitions')
+        }
+        setRequisitions([])
         return
       }
 
       setRequisitions((data as unknown as RequisitionWithDetails[]) || [])
     } catch (error) {
       console.error('Unexpected error:', error)
-      toast.error('Failed to load requisitions')
+      // Only show error if it's not a "no data" scenario
+      setRequisitions([])
     } finally {
       setLoading(false)
     }
@@ -58,7 +63,7 @@ const ApprovalsPage: React.FC = () => {
   const loadPendingReceipts = async () => {
     try {
       setLoading(true)
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('stock_receipts')
         .select(`
           *,
@@ -74,14 +79,18 @@ const ApprovalsPage: React.FC = () => {
 
       if (error) {
         console.error('Error loading receipts:', error)
-        toast.error('Failed to load pending receipts')
+        // Don't show error toast if it's just empty data
+        if (error.code !== 'PGRST116') {
+          toast.error('Failed to load pending receipts')
+        }
+        setReceipts([])
         return
       }
 
       setReceipts((data as unknown as StockReceiptWithDetails[]) || [])
     } catch (error) {
       console.error('Unexpected error:', error)
-      toast.error('Failed to load receipts')
+      setReceipts([])
     } finally {
       setLoading(false)
     }

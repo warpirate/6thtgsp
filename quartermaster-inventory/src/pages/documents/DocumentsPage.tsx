@@ -1,44 +1,56 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Upload, File, FileText, Image as ImageIcon, Download, Trash2, Search, Grid, List, X } from 'lucide-react'
-
-// Mock documents data
-const mockDocuments = [
-  {
-    id: '1',
-    file_name: 'receipt_001.pdf',
-    file_type: 'application/pdf',
-    file_size: 125000,
-    receipt_id: 'REC-2024-001',
-    created_at: '2024-10-01T10:00:00Z',
-    uploaded_by: 'John Smith',
-  },
-  {
-    id: '2',
-    file_name: 'invoice_hardware.pdf',
-    file_type: 'application/pdf',
-    file_size: 95000,
-    receipt_id: 'REC-2024-002',
-    created_at: '2024-10-02T14:30:00Z',
-    uploaded_by: 'Jane Doe',
-  },
-  {
-    id: '3',
-    file_name: 'product_image.jpg',
-    file_type: 'image/jpeg',
-    file_size: 250000,
-    receipt_id: 'REC-2024-003',
-    created_at: '2024-10-03T09:15:00Z',
-    uploaded_by: 'Mike Johnson',
-  },
-]
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/lib/auth/AuthProvider'
+import { Document } from '@/types'
+import { toast } from 'react-hot-toast'
 
 const DocumentsPage: React.FC = () => {
+  const { user } = useAuth()
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [isDragOver, setIsDragOver] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
-  const filteredDocuments = mockDocuments.filter((doc) =>
-    doc.file_name.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    loadDocuments()
+  }, [])
+
+  const loadDocuments = async () => {
+    try {
+      setLoading(true)
+      const { data, error } = await (supabase as any)
+        .from('documents')
+        .select(`
+          *,
+          uploaded_by_user:users!uploaded_by(full_name),
+          stock_receipt:stock_receipts(grn_number)
+        `)
+        .order('uploaded_at', { ascending: false })
+
+      if (error) {
+        console.error('Error loading documents:', error)
+        // Don't show error toast if table doesn't exist yet
+        if (error.code !== 'PGRST116' && error.code !== '42P01') {
+          toast.error('Failed to load documents')
+        }
+        setDocuments([])
+        return
+      }
+
+      setDocuments((data || []) as Document[])
+    } catch (error) {
+      console.error('Error loading documents:', error)
+      setDocuments([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filteredDocuments = documents.filter((doc) =>
+    doc.file_name?.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -64,22 +76,86 @@ const DocumentsPage: React.FC = () => {
     }
   }
 
-  const handleFileUpload = (files: File[]) => {
-    // TODO: Implement actual upload to Supabase Storage
-    console.log('Uploading files:', files)
-    alert(`${files.length} file(s) selected for upload. API integration pending.`)
-  }
+  const handleFileUpload = async (files: File[]) => {
+    if (!user) return
+    
+    setUploading(true)
+    try {
+      for (const file of files) {
+        // Upload to Supabase Storage
+        const fileExt = file.name.split('.').pop()
+        const fileName = `${user.id}/${Date.now()}.${fileExt}`
+        
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(fileName, file)
 
-  const handleDelete = (docId: string, fileName: string) => {
-    if (confirm(`Delete ${fileName}?`)) {
-      // TODO: Implement delete
-      alert('Delete functionality - API integration pending')
+        if (uploadError) throw uploadError
+
+        // Save document record
+        const { error: dbError } = await (supabase as any)
+          .from('documents')
+          .insert({
+            file_name: file.name,
+            file_path: fileName,
+            file_type: file.type,
+            file_size: file.size,
+            uploaded_by: user.id
+          })
+
+        if (dbError) throw dbError
+      }
+
+      toast.success(`${files.length} file(s) uploaded successfully!`)
+      loadDocuments()
+    } catch (error: any) {
+      console.error('Error uploading files:', error)
+      toast.error('Failed to upload files')
+    } finally {
+      setUploading(false)
     }
   }
 
-  const handleDownload = (doc: typeof mockDocuments[0]) => {
-    // TODO: Implement download
-    alert(`Download ${doc.file_name} - API integration pending`)
+  const handleDelete = async (docId: string, fileName: string) => {
+    if (!confirm(`Delete ${fileName}?`)) return
+    
+    try {
+      const { error } = await (supabase as any)
+        .from('documents')
+        .delete()
+        .eq('id', docId)
+
+      if (error) throw error
+
+      toast.success('Document deleted successfully')
+      loadDocuments()
+    } catch (error: any) {
+      console.error('Error deleting document:', error)
+      toast.error('Failed to delete document')
+    }
+  }
+
+  const handleDownload = async (doc: Document) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .download(doc.file_path)
+
+      if (error) throw error
+
+      // Create download link
+      const url = URL.createObjectURL(data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = doc.file_name
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (error: any) {
+      console.error('Error downloading document:', error)
+      toast.error('Failed to download document')
+    }
   }
 
   const getFileIcon = (fileType: string) => {
@@ -94,7 +170,8 @@ const DocumentsPage: React.FC = () => {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return 'N/A'
     const date = new Date(dateString)
     return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
   }
@@ -259,7 +336,7 @@ const DocumentsPage: React.FC = () => {
                     {doc.receipt_id}
                   </td>
                   <td className="px-6 py-4 text-sm text-muted-foreground">
-                    {formatDate(doc.created_at)}
+                    {formatDate(doc.uploaded_at)}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex gap-2">

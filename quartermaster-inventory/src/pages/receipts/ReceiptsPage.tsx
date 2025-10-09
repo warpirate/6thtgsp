@@ -19,15 +19,25 @@ const ReceiptsPage: React.FC = () => {
     const loadReceipts = async () => {
       try {
         setLoading(true)
-        const { data, error } = await supabase
+        const { data, error } = await (supabase as any)
           .from('stock_receipts')
           .select('*')
           .order('created_at', { ascending: false })
         
-        if (error) throw error
-        setReceipts(data || [])
+        if (error) {
+          console.error('Error loading receipts:', error)
+          // Don't show error toast if table doesn't exist yet
+          if (error.code !== 'PGRST116' && error.code !== '42P01') {
+            console.error('Failed to load receipts')
+          }
+          setReceipts([])
+          return
+        }
+        
+        setReceipts((data || []) as StockReceipt[])
       } catch (error) {
         console.error('Error loading receipts:', error)
+        setReceipts([])
       } finally {
         setLoading(false)
       }
