@@ -301,12 +301,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setRoleName(null)
       setRequiresPasswordChange(false)
       
-      // Then sign out from Supabase
-      const { error } = await supabase.auth.signOut()
+      // Then sign out from Supabase (invalidate across tabs)
+      const { error } = await supabase.auth.signOut({ scope: 'global' as any })
       if (error) {
         console.error('Supabase sign out error:', error)
         // Don't throw - we've already cleared local state
       }
+      
+      // Aggressively clear any persisted auth tokens in storage
+      try {
+        // Clear common Supabase storage keys (sb- prefix for pkce/local storage)
+        const keysToRemove = Object.keys(localStorage).filter((key) =>
+          key.startsWith('sb-') || key.includes('supabase') || key.includes('auth')
+        )
+        keysToRemove.forEach((k) => localStorage.removeItem(k))
+      } catch {}
+      try {
+        sessionStorage.clear()
+      } catch {}
+      
+      // Double-check no session remains
+      try {
+        await supabase.auth.getSession()
+      } catch {}
       
       toast.success('Signed out successfully')
       

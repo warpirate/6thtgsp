@@ -21,7 +21,9 @@ const InventoryPage: React.FC = () => {
     unit: 'piece',
     unit_price: '',
     reorder_level: '10',
-    current_stock: '0'
+    current_stock: '0',
+    invoice_number: '',
+    received_from: ''
   })
 
   useEffect(() => {
@@ -108,7 +110,9 @@ const InventoryPage: React.FC = () => {
           reorder_level: parseInt(newItem.reorder_level),
           current_stock: parseInt(newItem.current_stock),
           allocated_stock: 0,
-          is_active: true
+          is_active: true,
+          invoice_number: newItem.invoice_number || null,
+          received_from: newItem.received_from || null
         })
         .select()
 
@@ -123,7 +127,9 @@ const InventoryPage: React.FC = () => {
         unit: 'piece',
         unit_price: '',
         reorder_level: '10',
-        current_stock: '0'
+        current_stock: '0',
+        invoice_number: '',
+        received_from: ''
       })
       loadItems()
     } catch (error: any) {
@@ -378,6 +384,52 @@ const InventoryPage: React.FC = () => {
                   ))}
                 </select>
               </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Invoice Number
+                  </label>
+                  <input
+                    type="text"
+                    value={newItem.invoice_number}
+                    onChange={(e) => setNewItem({ ...newItem, invoice_number: e.target.value })}
+                    className="input w-full"
+                    placeholder="Enter invoice number"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Received From
+                  </label>
+                  <select
+                    value={newItem.received_from}
+                    onChange={(e) => setNewItem({ ...newItem, received_from: e.target.value })}
+                    className="input w-full"
+                  >
+                    <option value="">Select source</option>
+                    <option value="Head Office">Head office</option>
+                    <option value="Forum">Forum</option>
+                    <option value="Chief Office">Chief office</option>
+                    <option value="Other">Other (enter below)</option>
+                  </select>
+                </div>
+              </div>
+
+              {newItem.received_from === 'Other' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Other Source
+                  </label>
+                  <input
+                    type="text"
+                    onChange={(e) => setNewItem({ ...newItem, received_from: e.target.value })}
+                    className="input w-full"
+                    placeholder="Enter source"
+                  />
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
