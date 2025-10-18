@@ -463,6 +463,7 @@ const UsersPage: React.FC = () => {
           >
             <option value="">All Roles</option>
             <option value="super_admin">Super Admin</option>
+            <option value="semi_super_admin">Semi Super Admin</option>
             <option value="admin">Admin</option>
             <option value="user">User</option>
             <option value="semi_user">Semi User</option>
@@ -654,8 +655,9 @@ const UsersPage: React.FC = () => {
                 >
                   <option value="semi_user">Semi User (Requester)</option>
                   <option value="user">User (Watchman/Store Keeper)</option>
-                  <option value="admin">Admin (Approver)</option>
-                  <option value="super_admin">Super Admin</option>
+                  <option value="admin">Admin (Quartermaster)</option>
+                  <option value="semi_super_admin">Semi Super Admin (Additional Commandant)</option>
+                  <option value="super_admin">Super Admin (Commandant)</option>
                 </select>
               </div>
 
@@ -856,8 +858,9 @@ const UsersPage: React.FC = () => {
                 >
                   <option value="semi_user">Semi User (Requester)</option>
                   <option value="user">User (Watchman/Store Keeper)</option>
-                  <option value="admin">Admin (Approver)</option>
-                  <option value="super_admin">Super Admin</option>
+                  <option value="admin">Admin (Quartermaster)</option>
+                  <option value="semi_super_admin">Semi Super Admin (Additional Commandant)</option>
+                  <option value="super_admin">Super Admin (Commandant)</option>
                 </select>
               </div>
 

@@ -6,7 +6,7 @@ import { ReceiptStatus, StockReceipt } from '@/types'
 import { supabase } from '@/lib/supabase'
 
 const ReceiptsPage: React.FC = () => {
-  const { hasPermission } = useAuth()
+  const { hasPermission, roleName, userProfile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [searchTerm, setSearchTerm] = useState(searchParams.get('q') || '')
   const [statusFilter, setStatusFilter] = useState<ReceiptStatus[]>([])
@@ -19,10 +19,21 @@ const ReceiptsPage: React.FC = () => {
     const loadReceipts = async () => {
       try {
         setLoading(true)
-        const { data, error } = await (supabase as any)
+        
+        let query = (supabase as any)
           .from('stock_receipts')
           .select('*')
-          .order('created_at', { ascending: false })
+        
+        // Semi Super Admin: Only show receipts nominated to them
+        if (roleName === 'semi_super_admin') {
+          query = query
+            .eq('status', 'nominated')
+            .eq('nominated_to', userProfile?.id)
+        }
+        
+        query = query.order('created_at', { ascending: false })
+        
+        const { data, error } = await query
         
         if (error) {
           console.error('Error loading receipts:', error)
@@ -49,8 +60,11 @@ const ReceiptsPage: React.FC = () => {
   // Filter receipts
   const filteredReceipts = useMemo(() => {
     return receipts.filter((receipt) => {
-      const matchesSearch = receipt.grn_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (receipt.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
+      const matchesSearch = 
+        ((receipt as any).iv_number?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+        (receipt.grn_number?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+        ((receipt as any).supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+        ((receipt as any).invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
       const matchesStatus = statusFilter.length === 0 || statusFilter.includes(receipt.status)
       return matchesSearch && matchesStatus
     })
@@ -60,6 +74,7 @@ const ReceiptsPage: React.FC = () => {
     const config = {
       draft: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Draft' },
       submitted: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Submitted' },
+      nominated: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Nominated' },
       verified: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Verified' },
       approved: { bg: 'bg-green-100', text: 'text-green-800', label: 'Approved' },
       rejected: { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected' },
@@ -90,11 +105,11 @@ const ReceiptsPage: React.FC = () => {
 
         {hasPermission('create_receipt') && (
           <Link
-            to="/receipts/create"
+            to="/receipts/create-iv"
             className="btn btn-primary flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            New Receipt
+            Create IV Entry
           </Link>
         )}
       </div>
@@ -110,7 +125,7 @@ const ReceiptsPage: React.FC = () => {
             <input
               type="text"
               className="input pl-10 w-full"
-              placeholder="Search receipts by item name or receipt ID..."
+              placeholder="Search by IV#, RV#, supplier, or invoice number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -181,13 +196,13 @@ const ReceiptsPage: React.FC = () => {
             <thead className="bg-muted/50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  GRN Number
+                  IV Number
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  RV Number
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Supplier
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                  Challan Number
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Status
@@ -214,8 +229,8 @@ const ReceiptsPage: React.FC = () => {
                       <Package className="w-12 h-12 opacity-50" />
                       <p>No receipts found</p>
                       {hasPermission('create_receipt') && (
-                        <Link to="/receipts/create" className="text-primary hover:text-primary/80 text-sm">
-                          Create your first receipt
+                        <Link to="/receipts/create-iv" className="text-primary hover:text-primary/80 text-sm">
+                          Create your first IV entry
                         </Link>
                       )}
                     </div>
@@ -225,26 +240,26 @@ const ReceiptsPage: React.FC = () => {
                 filteredReceipts.map((receipt) => (
                   <tr key={receipt.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-foreground">
+                        {(receipt as any).iv_number || '-'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <Link
                         to={`/receipts/${receipt.id}`}
                         className="text-sm font-medium text-primary hover:text-primary/80"
                       >
-                        {receipt.grn_number}
+                        {receipt.grn_number || <span className="text-muted-foreground italic">Pending</span>}
                       </Link>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-foreground">{receipt.supplier_name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-foreground">
-                        {receipt.challan_number}
-                      </div>
+                      <div className="text-sm text-foreground">{(receipt as any).supplier_name || (receipt as any).received_from || '-'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(receipt.status)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-muted-foreground">{formatDate(receipt.receipt_date || receipt.created_at || '')}</div>
+                      <div className="text-sm text-muted-foreground">{formatDate((receipt as any).receipt_date || receipt.created_at || '')}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       <Link

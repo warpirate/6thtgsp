@@ -161,6 +161,41 @@ class AuditService {
   }
 
   /**
+   * Create audit log entry
+   */
+  async createAuditLog(params: {
+    action: string
+    table_name: string
+    record_id: string
+    old_values?: Record<string, any>
+    new_values?: Record<string, any>
+    description?: string
+  }) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) throw new Error('Not authenticated')
+
+      const { error } = await (supabase as any)
+        .from('audit_logs')
+        .insert({
+          user_id: user.id,
+          action: params.action,
+          table_name: params.table_name,
+          record_id: params.record_id,
+          old_values: params.old_values || null,
+          new_values: params.new_values || null,
+          description: params.description || null,
+          timestamp: new Date().toISOString()
+        })
+
+      if (error) throw error
+    } catch (error: any) {
+      console.error('Error creating audit log:', error)
+      // Don't throw - audit logging failure shouldn't break the main operation
+    }
+  }
+
+  /**
    * Format audit log message
    */
   formatAuditMessage(log: AuditLog): string {

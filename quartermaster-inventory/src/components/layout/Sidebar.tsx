@@ -113,9 +113,34 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
       return [
         ...baseItems,
         {
+          name: 'Item Catalog',
+          href: '/catalog',
+          icon: ShoppingBag,
+        },
+        {
+          name: 'Requisitions',
+          href: '/requisitions',
+          icon: ListChecks,
+        },
+        {
           name: 'Approvals',
           href: '/approvals',
           icon: CheckCircle,
+        },
+        {
+          name: 'Issue Items',
+          href: '/issuance',
+          icon: Send,
+        },
+        {
+          name: 'Stock Receipts',
+          href: '/receipts',
+          icon: Receipt,
+        },
+        {
+          name: 'Returns',
+          href: '/returns',
+          icon: RotateCcw,
         },
         {
           name: 'Inventory & Reports',
@@ -126,6 +151,37 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
           name: 'Audit Logs',
           href: '/audit',
           icon: FileText,
+        },
+        {
+          name: 'Documents',
+          href: '/documents',
+          icon: Folder,
+        },
+        {
+          name: 'Settings',
+          href: '/settings',
+          icon: Settings,
+        },
+      ]
+    }
+
+    if (role === 'semi_super_admin') {
+      return [
+        ...baseItems,
+        {
+          name: 'Stock Receipts',
+          href: '/receipts',
+          icon: Receipt,
+        },
+        {
+          name: 'Requisitions',
+          href: '/requisitions',
+          icon: ListChecks,
+        },
+        {
+          name: 'Inventory & Reports',
+          href: '/inventory',
+          icon: BarChart3,
         },
         {
           name: 'Settings',
@@ -144,6 +200,36 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
           icon: Users,
         },
         {
+          name: 'Item Catalog',
+          href: '/catalog',
+          icon: ShoppingBag,
+        },
+        {
+          name: 'Requisitions',
+          href: '/requisitions',
+          icon: ListChecks,
+        },
+        {
+          name: 'Approvals',
+          href: '/approvals',
+          icon: CheckCircle,
+        },
+        {
+          name: 'Issue Items',
+          href: '/issuance',
+          icon: Send,
+        },
+        {
+          name: 'Stock Receipts',
+          href: '/receipts',
+          icon: Receipt,
+        },
+        {
+          name: 'Returns',
+          href: '/returns',
+          icon: RotateCcw,
+        },
+        {
           name: 'Inventory & Reports',
           href: '/inventory',
           icon: BarChart3,
@@ -152,6 +238,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, collapsed, onClose, onToggle })
           name: 'Audit Logs',
           href: '/audit',
           icon: FileText,
+        },
+        {
+          name: 'Documents',
+          href: '/documents',
+          icon: Folder,
         },
         {
           name: 'Settings',

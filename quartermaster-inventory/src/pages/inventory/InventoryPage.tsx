@@ -19,11 +19,10 @@ const InventoryPage: React.FC = () => {
     description: '',
     category_id: '',
     unit: 'piece',
-    unit_price: '',
-    reorder_level: '10',
-    current_stock: '0',
+    previous_stock: '0',
+    received_stock: '0',
     invoice_number: '',
-    received_from: ''
+    firm: ''
   })
 
   useEffect(() => {
@@ -94,10 +93,14 @@ const InventoryPage: React.FC = () => {
 
   const handleCreateItem = async () => {
     try {
-      if (!newItem.name || !newItem.category_id) {
-        toast.error('Please fill in required fields')
+      if (!newItem.name || !newItem.category_id || !newItem.firm) {
+        toast.error('Please fill in all required fields (Name, Category, Firm)')
         return
       }
+
+      const previousStock = parseInt(newItem.previous_stock) || 0
+      const receivedStock = parseInt(newItem.received_stock) || 0
+      const totalStock = previousStock + receivedStock
 
       const { data, error } = await (supabase as any)
         .from('items_master')
@@ -106,13 +109,13 @@ const InventoryPage: React.FC = () => {
           description: newItem.description,
           category_id: newItem.category_id,
           unit_of_measure: newItem.unit,
-          unit_price: newItem.unit_price ? parseFloat(newItem.unit_price) : null,
-          reorder_level: parseInt(newItem.reorder_level),
-          current_stock: parseInt(newItem.current_stock),
+          previous_stock: previousStock,
+          received_stock: receivedStock,
+          current_stock: totalStock,
           allocated_stock: 0,
           is_active: true,
           invoice_number: newItem.invoice_number || null,
-          received_from: newItem.received_from || null
+          firm: newItem.firm
         })
         .select()
 
@@ -120,22 +123,87 @@ const InventoryPage: React.FC = () => {
 
       toast.success('Item created successfully!')
       setShowAddModal(false)
+      setEditingItem(null)
       setNewItem({
         name: '',
         description: '',
         category_id: '',
         unit: 'piece',
-        unit_price: '',
-        reorder_level: '10',
-        current_stock: '0',
+        previous_stock: '0',
+        received_stock: '0',
         invoice_number: '',
-        received_from: ''
+        firm: ''
       })
       loadItems()
     } catch (error: any) {
       console.error('Error creating item:', error)
       toast.error(error.message || 'Failed to create item')
     }
+  }
+
+  const handleUpdateItem = async () => {
+    try {
+      if (!editingItem || !newItem.name || !newItem.category_id || !newItem.firm) {
+        toast.error('Please fill in all required fields (Name, Category, Firm)')
+        return
+      }
+
+      const previousStock = parseInt(newItem.previous_stock) || 0
+      const receivedStock = parseInt(newItem.received_stock) || 0
+      const totalStock = previousStock + receivedStock
+
+      const { data, error } = await (supabase as any)
+        .from('items_master')
+        .update({
+          nomenclature: newItem.name,
+          description: newItem.description,
+          category_id: newItem.category_id,
+          unit_of_measure: newItem.unit,
+          previous_stock: previousStock,
+          received_stock: receivedStock,
+          current_stock: totalStock,
+          invoice_number: newItem.invoice_number || null,
+          firm: newItem.firm,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingItem.id)
+        .select()
+
+      if (error) throw error
+
+      toast.success('Item updated successfully!')
+      setShowAddModal(false)
+      setEditingItem(null)
+      setNewItem({
+        name: '',
+        description: '',
+        category_id: '',
+        unit: 'piece',
+        previous_stock: '0',
+        received_stock: '0',
+        invoice_number: '',
+        firm: ''
+      })
+      loadItems()
+    } catch (error: any) {
+      console.error('Error updating item:', error)
+      toast.error(error.message || 'Failed to update item')
+    }
+  }
+
+  const handleEditClick = (item: ItemMasterWithCategory) => {
+    setEditingItem(item)
+    setNewItem({
+      name: item.name || item.nomenclature || '',
+      description: item.description || '',
+      category_id: item.category_id || '',
+      unit: item.unit || item.unit_of_measure || 'piece',
+      previous_stock: String((item as any).previous_stock || 0),
+      received_stock: String((item as any).received_stock || 0),
+      invoice_number: item.invoice_number || '',
+      firm: (item as any).firm || ''
+    })
+    setShowAddModal(true)
   }
 
   const getStockBadgeColor = (stock: number, reorderLevel: number = 10) => {
@@ -244,7 +312,7 @@ const InventoryPage: React.FC = () => {
                     Stock
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Price
+                    Firm
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Status
@@ -301,19 +369,20 @@ const InventoryPage: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {item.unit_price ? `₹${item.unit_price.toLocaleString()}` : 'N/A'}
+                      {(item as any).firm || 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`status-badge ${getStockBadgeColor(item.available_stock, item.reorder_level)}`}>
-                        {getStockStatus(item.available_stock, item.reorder_level)}
+                      <span className={`status-badge ${getStockBadgeColor(item.available_stock, 10)}`}>
+                        {getStockStatus(item.available_stock, 10)}
                       </span>
                     </td>
                     {hasPermission('manage_inventory') && (
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => setEditingItem(item)}
+                            onClick={() => handleEditClick(item)}
                             className="text-blue-600 hover:text-blue-900"
+                            title="Edit item"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -334,11 +403,13 @@ const InventoryPage: React.FC = () => {
         </div>
       )}
 
-      {/* Add Item Modal */}
+      {/* Add/Edit Item Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Add New Item</h3>
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              {editingItem ? 'Edit Item' : 'Add New Item'}
+            </h3>
             
             <div className="space-y-4">
               <div>
@@ -385,95 +456,66 @@ const InventoryPage: React.FC = () => {
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Invoice Number
-                  </label>
-                  <input
-                    type="text"
-                    value={newItem.invoice_number}
-                    onChange={(e) => setNewItem({ ...newItem, invoice_number: e.target.value })}
-                    className="input w-full"
-                    placeholder="Enter invoice number"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Received From
-                  </label>
-                  <select
-                    value={newItem.received_from}
-                    onChange={(e) => setNewItem({ ...newItem, received_from: e.target.value })}
-                    className="input w-full"
-                  >
-                    <option value="">Select source</option>
-                    <option value="Head Office">Head office</option>
-                    <option value="Forum">Forum</option>
-                    <option value="Chief Office">Chief office</option>
-                    <option value="Other">Other (enter below)</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Invoice Number
+                </label>
+                <input
+                  type="text"
+                  value={newItem.invoice_number}
+                  onChange={(e) => setNewItem({ ...newItem, invoice_number: e.target.value })}
+                  className="input w-full"
+                  placeholder="Enter invoice number"
+                />
               </div>
 
-              {newItem.received_from === 'Other' && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Received From *
+                </label>
+                <select
+                  value={newItem.firm === 'Head Office' || newItem.firm === 'Chief Office' ? newItem.firm : 'Other'}
+                  onChange={(e) => {
+                    if (e.target.value === 'Head Office' || e.target.value === 'Chief Office') {
+                      setNewItem({ ...newItem, firm: e.target.value })
+                    } else {
+                      setNewItem({ ...newItem, firm: '' })
+                    }
+                  }}
+                  className="input w-full"
+                >
+                  <option value="">Select source</option>
+                  <option value="Head Office">Head Office</option>
+                  <option value="Chief Office">Chief Office</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              {(newItem.firm !== 'Head Office' && newItem.firm !== 'Chief Office') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Other Source
+                    Other Source *
                   </label>
-                  <input
-                    type="text"
-                    onChange={(e) => setNewItem({ ...newItem, received_from: e.target.value })}
+                  <textarea
+                    value={newItem.firm === 'Head Office' || newItem.firm === 'Chief Office' ? '' : newItem.firm}
+                    onChange={(e) => setNewItem({ ...newItem, firm: e.target.value })}
                     className="input w-full"
-                    placeholder="Enter source"
+                    rows={2}
+                    placeholder="Enter firm/organization name (required)"
+                    required
                   />
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit
-                  </label>
-                  <select
-                    value={newItem.unit}
-                    onChange={(e) => setNewItem({ ...newItem, unit: e.target.value })}
-                    className="input w-full"
-                  >
-                    <option value="piece">Piece</option>
-                    <option value="kg">Kilogram</option>
-                    <option value="liter">Liter</option>
-                    <option value="meter">Meter</option>
-                    <option value="box">Box</option>
-                    <option value="pack">Pack</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Unit Price (₹)
+                    Previous Stock
                   </label>
                   <input
                     type="number"
-                    step="0.01"
-                    value={newItem.unit_price}
-                    onChange={(e) => setNewItem({ ...newItem, unit_price: e.target.value })}
-                    className="input w-full"
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Current Stock
-                  </label>
-                  <input
-                    type="number"
-                    value={newItem.current_stock}
-                    onChange={(e) => setNewItem({ ...newItem, current_stock: e.target.value })}
+                    value={newItem.previous_stock}
+                    onChange={(e) => setNewItem({ ...newItem, previous_stock: e.target.value })}
                     className="input w-full"
                     placeholder="0"
                   />
@@ -481,14 +523,27 @@ const InventoryPage: React.FC = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reorder Level
+                    Received Stock
                   </label>
                   <input
                     type="number"
-                    value={newItem.reorder_level}
-                    onChange={(e) => setNewItem({ ...newItem, reorder_level: e.target.value })}
+                    value={newItem.received_stock}
+                    onChange={(e) => setNewItem({ ...newItem, received_stock: e.target.value })}
                     className="input w-full"
-                    placeholder="10"
+                    placeholder="0"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Total Items
+                  </label>
+                  <input
+                    type="number"
+                    value={(parseInt(newItem.previous_stock) || 0) + (parseInt(newItem.received_stock) || 0)}
+                    className="input w-full bg-gray-50"
+                    disabled
+                    readOnly
                   />
                 </div>
               </div>
@@ -496,16 +551,29 @@ const InventoryPage: React.FC = () => {
 
             <div className="flex gap-3 justify-end mt-6">
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false)
+                  setEditingItem(null)
+                  setNewItem({
+                    name: '',
+                    description: '',
+                    category_id: '',
+                    unit: 'piece',
+                    previous_stock: '0',
+                    received_stock: '0',
+                    invoice_number: '',
+                    firm: ''
+                  })
+                }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
               >
                 Cancel
               </button>
               <button
-                onClick={handleCreateItem}
+                onClick={editingItem ? handleUpdateItem : handleCreateItem}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
               >
-                Create Item
+                {editingItem ? 'Update Item' : 'Create Item'}
               </button>
             </div>
           </div>

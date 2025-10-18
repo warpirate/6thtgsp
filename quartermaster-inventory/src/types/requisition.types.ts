@@ -48,17 +48,21 @@ export interface ItemMaster {
   id: string
   item_code: string
   name: string
+  nomenclature?: string
   description?: string
   category_id: string
   unit: string
-  unit_price?: number
-  reorder_level: number
+  unit_of_measure?: string
+  previous_stock: number
+  received_stock: number
   current_stock: number
   allocated_stock: number
   available_stock: number // computed
   location?: string
   specifications?: Record<string, any>
   image_url?: string
+  invoice_number?: string
+  firm: string
   active: boolean
   created_by?: string
   created_at: string

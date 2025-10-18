@@ -68,6 +68,7 @@ export enum UserRole {
   SEMI_USER = 'semi_user',
   USER = 'user',
   ADMIN = 'admin',
+  SEMI_SUPER_ADMIN = 'semi_super_admin',
   SUPER_ADMIN = 'super_admin',
 }
 
@@ -79,6 +80,7 @@ export const UserRoleValues = {
   SEMI_USER: 'semi_user' as const,
   USER: 'user' as const,
   ADMIN: 'admin' as const,
+  SEMI_SUPER_ADMIN: 'semi_super_admin' as const,
   SUPER_ADMIN: 'super_admin' as const,
 } as const
 

@@ -10,7 +10,8 @@ import {
   Trash2,
   Download,
   FileText,
-  AlertCircle
+  AlertCircle,
+  UserCheck
 } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { ReceiptStatus } from '@/types'
@@ -23,6 +24,7 @@ import {
   useReceiptDocuments 
 } from '@/hooks'
 import LoadingSpinner from '@/components/ui/LoadingSpinner'
+import { NominationModal } from '@/components/receipts/NominationModal'
 import { toast } from 'react-hot-toast'
 
 const ReceiptDetailPage: React.FC = () => {
@@ -32,6 +34,7 @@ const ReceiptDetailPage: React.FC = () => {
   const [showActionModal, setShowActionModal] = useState(false)
   const [actionType, setActionType] = useState<'verify' | 'approve' | 'reject' | null>(null)
   const [comments, setComments] = useState('')
+  const [showNominationModal, setShowNominationModal] = useState(false)
 
   // Fetch receipt data
   const { data: receipt, isLoading, error } = useReceipt(id!)
@@ -70,6 +73,7 @@ const ReceiptDetailPage: React.FC = () => {
     const config = {
       draft: { bg: 'bg-gray-100', text: 'text-gray-800', label: 'Draft', icon: FileText },
       submitted: { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Submitted', icon: Clock },
+      nominated: { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Nominated for Verification', icon: UserCheck },
       verified: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Verified', icon: CheckCircle },
       approved: { bg: 'bg-green-100', text: 'text-green-800', label: 'Approved', icon: CheckCircle },
       rejected: { bg: 'bg-red-100', text: 'text-red-800', label: 'Rejected', icon: XCircle },
@@ -99,8 +103,18 @@ const ReceiptDetailPage: React.FC = () => {
 
   const canEdit = receipt.status === 'draft' && receipt.received_by === userProfile?.id
   const canDelete = receipt.status === 'draft' && receipt.received_by === userProfile?.id
-  const canVerify = receipt.status === 'submitted' && hasPermission('verify_receipt')
-  const canApprove = receipt.status === 'verified' && hasPermission('approve_receipt')
+  
+  // Super Admin can nominate when status is submitted
+  const canNominate = receipt.status === 'submitted' && roleName === 'super_admin' && hasPermission('nominate_verifier')
+  
+  // Semi Super Admin can verify ONLY if nominated to them
+  const canVerify = receipt.status === 'nominated' && 
+                     roleName === 'semi_super_admin' && 
+                     (receipt as any).nominated_to === userProfile?.id &&
+                     hasPermission('verify_receipts')
+  
+  // Admin can approve after verification
+  const canApprove = receipt.status === 'verified' && hasPermission('approve_receipts')
 
   const handleAction = () => {
     if (!actionType) return
@@ -174,6 +188,15 @@ const ReceiptDetailPage: React.FC = () => {
       completed: receipt.status !== 'draft',
     },
     {
+      status: 'nominated',
+      label: 'Nominated for Verification',
+      date: (receipt as any).nominated_at,
+      user: (receipt as any).nominated_by_user?.full_name 
+        ? `Nominated ${(receipt as any).nominated_to_user?.full_name || 'officer'} by ${(receipt as any).nominated_by_user?.full_name}`
+        : null,
+      completed: !!(receipt as any).nominated_at,
+    },
+    {
       status: 'verified',
       label: 'Verified',
       date: receipt.verified_at,
@@ -192,6 +215,7 @@ const ReceiptDetailPage: React.FC = () => {
     if (receipt.status === 'rejected') {
       if (item.status === 'approved') return false
       if (item.status === 'verified' && !receipt.verified_at) return false
+      if (item.status === 'nominated' && !(receipt as any).nominated_at) return false
     }
     return true
   })
@@ -209,10 +233,22 @@ const ReceiptDetailPage: React.FC = () => {
         </button>
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">{receipt.grn_number}</h1>
-            <p className="mt-1 text-muted-foreground">
-              Created on {formatDate(receipt.created_at)}
-            </p>
+            <h1 className="text-3xl font-bold text-foreground">
+              {(receipt as any).iv_number || receipt.grn_number}
+            </h1>
+            <div className="flex gap-4 mt-2 text-sm text-muted-foreground">
+              <div>
+                <span className="font-medium">IV Number:</span> {(receipt as any).iv_number || 'N/A'}
+              </div>
+              {receipt.grn_number && (
+                <div>
+                  <span className="font-medium">RV Number:</span> {receipt.grn_number}
+                </div>
+              )}
+              <div>
+                <span className="font-medium">Created:</span> {formatDate(receipt.created_at)}
+              </div>
+            </div>
           </div>
           <div>{getStatusBadge(receipt.status)}</div>
         </div>
@@ -267,44 +303,91 @@ const ReceiptDetailPage: React.FC = () => {
       {/* Receipt Details */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="card p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">Item Details</h2>
+          <h2 className="text-lg font-semibold text-foreground">Receipt Information</h2>
           
-          <div>
-            <div className="text-sm font-medium text-muted-foreground">Supplier Name</div>
-            <div className="text-foreground">{receipt.supplier_name}</div>
-          </div>
-
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Challan Number</div>
-              <div className="text-foreground">{receipt.challan_number}</div>
+              <div className="text-sm font-medium text-muted-foreground">IV Number</div>
+              <div className="text-foreground">{(receipt as any).iv_number || '-'}</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Challan Date</div>
+              <div className="text-sm font-medium text-muted-foreground">RV Number</div>
               <div className="text-foreground">
-                {formatDate(receipt.challan_date)}
+                {receipt.grn_number || <span className="italic text-muted-foreground">Pending Verification</span>}
               </div>
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Receipt Date</div>
-              <div className="text-foreground">{formatDate(receipt.receipt_date)}</div>
+              <div className="text-sm font-medium text-muted-foreground">Received From</div>
+              <div className="text-foreground">{(receipt as any).received_from || '-'}</div>
             </div>
             <div>
-              <div className="text-sm font-medium text-muted-foreground">Vehicle Number</div>
-              <div className="text-foreground">{receipt.vehicle_number || '-'}</div>
+              <div className="text-sm font-medium text-muted-foreground">Supplier Name</div>
+              <div className="text-foreground">{(receipt as any).supplier_name || '-'}</div>
             </div>
           </div>
 
-          {receipt.remarks && (
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-sm font-medium text-muted-foreground">Receipt Date</div>
+              <div className="text-foreground">{formatDate((receipt as any).receipt_date || receipt.created_at)}</div>
+            </div>
+            <div>
+              <div className="text-sm font-medium text-muted-foreground">Invoice Number</div>
+              <div className="text-foreground">{(receipt as any).invoice_number || '-'}</div>
+            </div>
+          </div>
+
+          <div>
+            <div className="text-sm font-medium text-muted-foreground">Total Items</div>
+            <div className="text-foreground font-semibold">{(receipt as any).total_items || 0}</div>
+          </div>
+
+          {(receipt as any).remarks && (
             <div>
               <div className="text-sm font-medium text-muted-foreground">Remarks</div>
-              <div className="text-foreground">{receipt.remarks}</div>
+              <div className="text-foreground">{(receipt as any).remarks}</div>
             </div>
           )}
         </div>
+
+        {/* Nomination Details */}
+        {(receipt.status === 'nominated' || receipt.status === 'verified' || receipt.status === 'approved') && (receipt as any).nominated_to && (
+          <div className="card p-6 space-y-4 lg:col-span-2">
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+              <UserCheck className="w-5 h-5 text-blue-600" />
+              Verification Nomination
+            </h2>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <div className="font-medium text-blue-900 mb-1">Nominated By</div>
+                  <div className="text-blue-800">{(receipt as any).nominated_by_user?.full_name || 'Commandant'}</div>
+                  <div className="text-xs text-blue-600">{formatDate((receipt as any).nominated_at)}</div>
+                </div>
+                <div>
+                  <div className="font-medium text-blue-900 mb-1">Nominated To</div>
+                  <div className="text-blue-800">{(receipt as any).nominated_to_user?.full_name || 'Additional Commandant'}</div>
+                  <div className="text-xs text-blue-600">{(receipt as any).nominated_to_user?.rank || 'Verification Officer'}</div>
+                </div>
+                <div>
+                  <div className="font-medium text-blue-900 mb-1">Status</div>
+                  <div className="text-blue-800">
+                    {receipt.status === 'nominated' && '⏳ Pending Verification'}
+                    {receipt.status === 'verified' && '✅ Verified'}
+                    {receipt.status === 'approved' && '✅ Approved'}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Items Section */}
+      <div className="grid grid-cols-1 gap-6">
 
         <div className="card p-6 space-y-4">
           <h2 className="text-lg font-semibold text-foreground">Additional Information</h2>
@@ -355,6 +438,57 @@ const ReceiptDetailPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Receipt Items */}
+      {(receipt as any).receipt_items && (receipt as any).receipt_items.length > 0 && (
+        <div className="card p-6">
+          <h2 className="text-lg font-semibold text-foreground mb-4">Items</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                    Item Name
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                    Quantity Received
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase">
+                    Condition
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-card divide-y divide-border">
+                {(receipt as any).receipt_items.map((item: any) => (
+                  <tr key={item.id} className="hover:bg-muted/50">
+                    <td className="px-4 py-3 text-sm">
+                      <div className="font-medium text-foreground">
+                        {item.item?.nomenclature || item.item_name || 'N/A'}
+                      </div>
+                      {item.description && (
+                        <div className="text-xs text-muted-foreground mt-1">{item.description}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-foreground">
+                      {item.quantity_received || item.challan_quantity || 0} {item.unit_of_measure || ''}
+                    </td>
+                    <td className="px-4 py-3 text-sm">
+                      <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${
+                        item.condition === 'new' ? 'bg-green-100 text-green-800' :
+                        item.condition === 'good' ? 'bg-blue-100 text-blue-800' :
+                        item.condition === 'fair' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-red-100 text-red-800'
+                      }`}>
+                        {item.condition || 'N/A'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="card p-6">
         <div className="flex flex-wrap gap-3">
@@ -373,6 +507,16 @@ const ReceiptDetailPage: React.FC = () => {
             >
               <Trash2 className="w-4 h-4" />
               {isDeleting ? 'Deleting...' : 'Delete'}
+            </button>
+          )}
+
+          {canNominate && (
+            <button
+              onClick={() => setShowNominationModal(true)}
+              className="btn btn-primary flex items-center gap-2"
+            >
+              <UserCheck className="w-4 h-4" />
+              Nominate for Verification
             </button>
           )}
 
@@ -468,6 +612,18 @@ const ReceiptDetailPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Nomination Modal */}
+      <NominationModal
+        isOpen={showNominationModal}
+        onClose={() => setShowNominationModal(false)}
+        receiptId={receipt.id}
+        receiptNumber={(receipt as any).iv_number || receipt.grn_number}
+        onSuccess={() => {
+          // Refresh receipt data
+          window.location.reload()
+        }}
+      />
     </div>
   )
 }

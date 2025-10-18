@@ -485,11 +485,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'view_approved_requisitions',  // Can only see approved ones
         'issue_items',                 // Can mark as issued ONLY if approved by admin
         'accept_returns',
+        'create_receipt',              // Can create IVs
         'verify_receipts',             // Can verify stock receipts
         'manage_stock'
       ],
       
-      // Admin: Can approve requisitions and manage inventory
+
       'admin': [
         'create_requisition',
         'view_catalog',
@@ -499,11 +500,22 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'reject_requisition',
         'issue_items',                 // Admins can also issue
         'accept_returns',
-        'verify_receipts',
-        'approve_receipts',            // Can approve verified receipts
+        'create_receipt',              // Can create IVs
+        'approve_receipts',            // Can approve RVs for stock entry
         'view_reports',
         'manage_inventory',
         'manage_stock',
+      ],
+      
+      // Semi Super Admin (Additional Commandant): Physical verification authority
+      'semi_super_admin': [
+        'view_catalog',
+        'view_all_receipts',           // Can see all receipts
+        'view_nominated_receipts',     // Can see receipts nominated to them
+        'verify_receipts',             // Can verify IVs and generate RVs (ONLY if nominated)
+        'reject_receipts',             // Can reject during verification
+        'view_reports',
+        'view_all_requisitions',
       ],
       
       // Armory Officer: Special role for weapon management
@@ -516,7 +528,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'view_weapon_register'
       ],
       
-      // Super Admin: Full access including user management
+      // Super Admin (Commandant): Full access including user management
       'super_admin': [
         'all',
         'manage_users',
@@ -524,7 +536,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         'edit_user', 
         'delete_user',
         'reset_user_password',
-        'toggle_user_status'
+        'toggle_user_status',
+        'nominate_verifier',           // Can nominate semi super admin for verification
+        'view_all_receipts',
+        'view_all_requisitions'
       ]
     }
     

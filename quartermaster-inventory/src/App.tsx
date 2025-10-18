@@ -27,6 +27,7 @@ import CreateRequisitionPage from '@/pages/requisitions/CreateRequisitionPage'
 import ReceiptsPage from '@/pages/receipts/ReceiptsPage'
 import ReceiptDetailPage from '@/pages/receipts/ReceiptDetailPage'
 import CreateReceiptPage from '@/pages/receipts/CreateReceiptPage'
+import CreateIVPage from '@/pages/receipts/CreateIVPage'
 import IssuancePage from '@/pages/issuance/IssuancePage'
 import ApprovalsPage from '@/pages/approvals/ApprovalsPage'
 import InventoryPage from '@/pages/inventory/InventoryPage'
@@ -216,9 +217,9 @@ const App: React.FC = () => {
                       } />
                       <Route path="/requisitions/:id" element={<RequisitionDetailPage />} />
 
-                      {/* Stock Receipts - Users, Admins, Super Admins */}
+                      {/* Stock Receipts - Users, Admins, Semi Super Admins, Super Admins */}
                       <Route path="/receipts" element={
-                        <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN]}>
+                        <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SEMI_SUPER_ADMIN, UserRole.SUPER_ADMIN]}>
                           <ReceiptsPage />
                         </ProtectedRoute>
                       } />
@@ -227,8 +228,13 @@ const App: React.FC = () => {
                           <CreateReceiptPage />
                         </ProtectedRoute>
                       } />
-                      <Route path="/receipts/:id" element={
+                      <Route path="/receipts/create-iv" element={
                         <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SUPER_ADMIN]}>
+                          <CreateIVPage />
+                        </ProtectedRoute>
+                      } />
+                      <Route path="/receipts/:id" element={
+                        <ProtectedRoute requiredRoles={[UserRole.USER, UserRole.ADMIN, UserRole.SEMI_SUPER_ADMIN, UserRole.SUPER_ADMIN]}>
                           <ReceiptDetailPage />
                         </ProtectedRoute>
                       } />

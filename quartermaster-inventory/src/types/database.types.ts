@@ -642,10 +642,11 @@ export type Database = {
       receipt_status:
         | "draft"
         | "submitted"
+        | "nominated"
         | "verified"
         | "approved"
         | "rejected"
-      user_role: "semi_user" | "user" | "admin" | "super_admin"
+      user_role: "semi_user" | "user" | "admin" | "semi_super_admin" | "super_admin"
       workflow_action: "submitted" | "verified" | "approved" | "rejected"
     }
     CompositeTypes: {

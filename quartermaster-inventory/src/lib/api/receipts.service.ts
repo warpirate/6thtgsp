@@ -1,4 +1,5 @@
 import { supabase, supabaseHelpers } from '@/lib/supabase'
+import { auditService } from './audit.service'
 import type { 
   StockReceipt, 
   StockReceiptInsert, 
@@ -112,6 +113,8 @@ class ReceiptsService {
           received_by_user:users!stock_receipts_received_by_fkey(id, full_name, email, role),
           verified_by_user:users!stock_receipts_verified_by_fkey(id, full_name, email, role),
           approved_by_user:users!stock_receipts_approved_by_fkey(id, full_name, email, role),
+          nominated_by_user:users!stock_receipts_nominated_by_fkey(id, full_name, email, role, rank),
+          nominated_to_user:users!stock_receipts_nominated_to_fkey(id, full_name, email, role, rank),
           receipt_items(
             *,
             item:items_master(*)
@@ -245,6 +248,15 @@ class ReceiptsService {
 
       if (error) throw error
 
+      // Create audit log
+      await auditService.createAuditLog({
+        action: 'VERIFIED',
+        table_name: 'stock_receipts',
+        record_id: id,
+        new_values: { status: 'verified' },
+        description: `Verified receipt and generated RV number${comments ? ': ' + comments : ''}`
+      })
+
       toast.success('Receipt verified successfully!')
       return data
     } catch (error: any) {
@@ -268,6 +280,15 @@ class ReceiptsService {
 
       if (error) throw error
 
+      // Create audit log
+      await auditService.createAuditLog({
+        action: 'APPROVED',
+        table_name: 'stock_receipts',
+        record_id: id,
+        new_values: { status: 'approved' },
+        description: `Approved receipt and updated stock${comments ? ': ' + comments : ''}`
+      })
+
       toast.success('Receipt approved successfully!')
       return data
     } catch (error: any) {
@@ -290,6 +311,15 @@ class ReceiptsService {
       })
 
       if (error) throw error
+
+      // Create audit log
+      await auditService.createAuditLog({
+        action: 'REJECTED',
+        table_name: 'stock_receipts',
+        record_id: id,
+        new_values: { status: 'rejected' },
+        description: `Rejected receipt: ${comments}`
+      })
 
       toast.success('Receipt rejected')
       return data

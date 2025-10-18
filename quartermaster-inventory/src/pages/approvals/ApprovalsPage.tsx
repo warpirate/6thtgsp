@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react'
-import { CheckCircle, Clock, AlertTriangle, FileText, X, Check, MessageSquare } from 'lucide-react'
+import { CheckCircle, Clock, AlertTriangle, FileText, X, Check, MessageSquare, UserCheck } from 'lucide-react'
 import { useAuth } from '@/lib/auth/AuthProvider'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
 import { RequisitionWithDetails, StockReceiptWithDetails, RequisitionStatus } from '@/types'
 import { format } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
+import { NominationModal } from '@/components/receipts/NominationModal'
 
 const ApprovalsPage: React.FC = () => {
-  const { hasPermission, user } = useAuth()
+  const { hasPermission, user, roleName } = useAuth()
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'requisitions' | 'receipts'>('requisitions')
   const [requisitions, setRequisitions] = useState<RequisitionWithDetails[]>([])
@@ -18,6 +19,8 @@ const ApprovalsPage: React.FC = () => {
   const [selectedRequisition, setSelectedRequisition] = useState<RequisitionWithDetails | null>(null)
   const [showApprovalModal, setShowApprovalModal] = useState(false)
   const [approvalComments, setApprovalComments] = useState('')
+  const [showNominationModal, setShowNominationModal] = useState(false)
+  const [selectedReceipt, setSelectedReceipt] = useState<any>(null)
 
   // Load pending requisitions
   const loadPendingRequisitions = async () => {
@@ -59,23 +62,38 @@ const ApprovalsPage: React.FC = () => {
     }
   }
 
-  // Load pending receipts (verified, waiting for final approval)
+  // Load pending receipts based on role
+  // Super Admin: submitted IVs (for nomination) AND verified RVs (for approval)
+  // Admin: Can view but not approve
   const loadPendingReceipts = async () => {
     try {
       setLoading(true)
-      const { data, error } = await (supabase as any)
+      
+      let query = (supabase as any)
         .from('stock_receipts')
         .select(`
           *,
-          received_by_user:users!received_by(id, full_name, email),
-          verified_by_user:users!verified_by(id, full_name, email),
+          received_by_user:users!stock_receipts_received_by_fkey(id, full_name, email),
+          verified_by_user:users!stock_receipts_verified_by_fkey(id, full_name, email),
+          nominated_by_user:users!stock_receipts_nominated_by_fkey(id, full_name, email),
+          nominated_to_user:users!stock_receipts_nominated_to_fkey(id, full_name, email),
           receipt_items(
             *,
             item:items_master(*)
           )
         `)
-        .eq('status', 'verified')
-        .order('created_at', { ascending: false })
+      
+      // Super Admin sees both submitted (for nomination) and verified (for approval)
+      if (roleName === 'super_admin') {
+        query = query.in('status', ['submitted', 'verified'])
+      } else {
+        // Admin sees verified only (view only, cannot approve)
+        query = query.eq('status', 'verified')
+      }
+      
+      query = query.order('created_at', { ascending: false })
+      
+      const { data, error } = await query
 
       if (error) {
         console.error('Error loading receipts:', error)
@@ -373,7 +391,9 @@ const ApprovalsPage: React.FC = () => {
               <Clock className="mx-auto h-12 w-12 text-muted-foreground" />
               <h3 className="mt-2 text-sm font-medium text-foreground">No pending receipts</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                All verified receipts have been approved. New submissions will appear here.
+                {roleName === 'super_admin' 
+                  ? 'No IVs awaiting nomination or verified RVs awaiting approval. New submissions will appear here.'
+                  : 'All verified receipts have been approved. New submissions will appear here.'}
               </p>
             </div>
           ) : (
@@ -381,23 +401,42 @@ const ApprovalsPage: React.FC = () => {
               <div key={receipt.id} className="card p-6 hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-foreground">
-                      Receipt #{receipt.grn_number}
-                    </h3>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-semibold text-foreground">
+                        {receipt.status === 'submitted' 
+                          ? `IV ${(receipt as any).iv_number}` 
+                          : `RV ${receipt.grn_number}`}
+                      </h3>
+                      {receipt.status === 'submitted' && (
+                        <span className="px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                          Awaiting Nomination
+                        </span>
+                      )}
+                      {receipt.status === 'verified' && (
+                        <span className="px-2 py-1 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                          Awaiting Approval
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-2 space-y-1 text-sm text-muted-foreground">
                       <p>
-                        <span className="font-medium">Received by:</span>{' '}
+                        <span className="font-medium">Created by:</span>{' '}
                         {(receipt.received_by_user as any)?.full_name || 'Unknown'}
                       </p>
+                      {receipt.status === 'verified' && (receipt.verified_by_user as any)?.full_name && (
+                        <p>
+                          <span className="font-medium">Verified by:</span>{' '}
+                          {(receipt.verified_by_user as any)?.full_name}
+                        </p>
+                      )}
                       <p>
-                        <span className="font-medium">Verified by:</span>{' '}
-                        {(receipt.verified_by_user as any)?.full_name || 'Unknown'}
+                        <span className="font-medium">Source:</span> {(receipt as any).received_from || 'N/A'}
                       </p>
                       <p>
-                        <span className="font-medium">Supplier:</span> {receipt.supplier_name || 'N/A'}
+                        <span className="font-medium">Total Items:</span> {(receipt as any).total_items || 0}
                       </p>
                       <p>
-                        <span className="font-medium">Created:</span>{' '}
+                        <span className="font-medium">Date:</span>{' '}
                         {receipt.created_at && format(new Date(receipt.created_at), 'MMM dd, yyyy')}
                       </p>
                     </div>
@@ -410,13 +449,31 @@ const ApprovalsPage: React.FC = () => {
                     >
                       View Details
                     </button>
-                    <button
-                      onClick={() => handleApproveReceipt(receipt.id)}
-                      disabled={approving === receipt.id}
-                      className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                    >
-                      {approving === receipt.id ? 'Approving...' : 'Approve'}
-                    </button>
+                    
+                    {/* Super Admin: Nominate button for submitted IVs */}
+                    {roleName === 'super_admin' && receipt.status === 'submitted' && (
+                      <button
+                        onClick={() => {
+                          setSelectedReceipt(receipt)
+                          setShowNominationModal(true)
+                        }}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 justify-center"
+                      >
+                        <UserCheck className="w-4 h-4" />
+                        Nominate
+                      </button>
+                    )}
+                    
+                    {/* Super Admin: Approve button for verified RVs */}
+                    {roleName === 'super_admin' && receipt.status === 'verified' && (
+                      <button
+                        onClick={() => handleApproveReceipt(receipt.id)}
+                        disabled={approving === receipt.id}
+                        className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        {approving === receipt.id ? 'Approving...' : 'Approve'}
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -472,6 +529,25 @@ const ApprovalsPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Nomination Modal */}
+      {showNominationModal && selectedReceipt && (
+        <NominationModal
+          isOpen={showNominationModal}
+          onClose={() => {
+            setShowNominationModal(false)
+            setSelectedReceipt(null)
+          }}
+          receiptId={selectedReceipt.id}
+          receiptNumber={(selectedReceipt as any).iv_number || selectedReceipt.grn_number}
+          onSuccess={() => {
+            setShowNominationModal(false)
+            setSelectedReceipt(null)
+            loadPendingReceipts() // Refresh the list
+            toast.success('Officer nominated successfully!')
+          }}
+        />
       )}
     </div>
   )
